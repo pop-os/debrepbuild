@@ -23,10 +23,6 @@ pub enum DownloadResult {
 
 fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadError> {
     eprintln!("downloading {}", item.name);
-    let mut response = client
-        .get(&item.url)
-        .send()
-        .map_err(|why| DownloadError::Request { item: item.name.clone(), why })?;
 
     let parent = item.destination();
     let filename = item.file_name();
@@ -36,6 +32,11 @@ fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadEr
         let mut capacity = File::open(&destination)
             .and_then(|file| file.metadata().map(|x| x.len()))
             .unwrap_or(0);
+
+        let response = client
+            .head(&item.url)
+            .send()
+            .map_err(|why| DownloadError::Request { item: item.name.clone(), why })?;
 
         if check_length(&response, capacity) {
             return Ok(DownloadResult::AlreadyExists);
@@ -47,6 +48,11 @@ fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadEr
     };
 
     let mut dest = dest_result.map_err(|why| DownloadError::File { item: item.name.clone(), why })?;
+
+    let mut response = client
+        .get(&item.url)
+        .send()
+        .map_err(|why| DownloadError::Request { item: item.name.clone(), why })?;
 
     response.copy_to(&mut dest)
         .map(|x| DownloadResult::Downloaded(x))

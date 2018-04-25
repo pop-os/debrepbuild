@@ -10,6 +10,7 @@ use xz2::read::XzEncoder;
 use sources::Config;
 
 pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<()> {
+    eprintln!("generating binary files");
     let path = PathBuf::from(["dists/", &config.archive, "/main/binary-", arch, "/"].concat());
     fs::create_dir_all(&path)?;
 
@@ -40,6 +41,7 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
 }
 
 pub(crate) fn generate_dists_release(config: &Config, release_path: &Path) -> io::Result<()> {
+    eprintln!("generating dists release files");
     let release = Command::new("apt-ftparchive")
         .arg("-o")
         .arg(format!("APT::FTPArchive::Release::Origin={}", config.origin))
@@ -67,6 +69,7 @@ pub(crate) fn generate_dists_release(config: &Config, release_path: &Path) -> io
 }
 
 pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
+    eprintln!("generating InRelease file");
     let exit_status = Command::new("gpg")
         .args(&[
             "--clearsign",
@@ -90,6 +93,7 @@ pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) 
 }
 
 pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
+    eprintln!("generating Release.gpg file");
     let exit_status = Command::new("gpg")
         .args(&[
             "-abs",
@@ -108,6 +112,6 @@ pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> 
         if exit_status.success() {
             Ok(())
         } else {
-            Err(io::Error::new(io::ErrorKind::Other, "gpg_in_release failed"))
+            Err(io::Error::new(io::ErrorKind::Other, "gpg_release failed"))
         }
 }
