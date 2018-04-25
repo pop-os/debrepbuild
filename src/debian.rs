@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::{self, File},
     io::{self, Write},
     path::{Path, PathBuf},
@@ -21,6 +22,9 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
         .output()
         .map(|data| data.stdout)?;
 
+    let mut uncompressed_packages = File::create(path.join("Packages"))?;
+    uncompressed_packages.write_all(&package)?;
+
     let mut gz_file = File::create(path.join("Packages.gz"))?;
     let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
     compressor.write_all(&package)?;
@@ -41,8 +45,13 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
     Ok(())
 }
 
-pub(crate) fn generate_dists_release(config: &Config, release_path: &Path) -> io::Result<()> {
+pub(crate) fn generate_dists_release(config: &Config) -> io::Result<()> {
     eprintln!("generating dists release files");
+
+    let dist_dir = &["dists/", &config.archive].concat();
+    let cwd = env::current_dir()?;
+    env::set_current_dir(dist_dir)?;
+
     let release = Command::new("apt-ftparchive")
         .arg("-o")
         .arg(format!(
@@ -80,8 +89,9 @@ pub(crate) fn generate_dists_release(config: &Config, release_path: &Path) -> io
         .output()
         .map(|data| data.stdout)?;
 
-    let mut release_file = File::create(release_path)?;
-    release_file.write_all(&release)
+    let mut release_file = File::create("Release")?;
+    release_file.write_all(&release)?;
+    env::set_current_dir(cwd)
 }
 
 pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {

@@ -58,7 +58,7 @@ fn main() {
             let release_gpg_path =
                 PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
 
-            if let Err(why) = debian::generate_dists_release(&sources, &release_path) {
+            if let Err(why) = debian::generate_dists_release(&sources) {
                 eprintln!("failed to generate release file for dists: {}", why);
                 exit(1);
             }
