@@ -6,12 +6,14 @@ extern crate serde;
 extern crate toml;
 extern crate xz2;
 
-#[macro_use] extern crate failure_derive;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate failure_derive;
+#[macro_use]
+extern crate serde_derive;
 
-pub mod sources;
-pub mod download;
 pub mod debian;
+pub mod download;
+pub mod sources;
 
 use std::path::PathBuf;
 use std::process::exit;
@@ -52,20 +54,25 @@ fn main() {
             }
 
             let release_path = PathBuf::from(["dists/", &sources.archive, "/Release"].concat());
-            let in_release_path = PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
-            let release_gpg_path = PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
+            let in_release_path =
+                PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
+            let release_gpg_path =
+                PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
 
             if let Err(why) = debian::generate_dists_release(&sources, &release_path) {
                 eprintln!("failed to generate release file for dists: {}", why);
                 exit(1);
             }
 
-            if let Err(why) = debian::gpg_in_release(&sources.email, &release_path, &in_release_path) {
+            if let Err(why) =
+                debian::gpg_in_release(&sources.email, &release_path, &in_release_path)
+            {
                 eprintln!("failed to generate InRelease file: {}", why);
                 exit(1);
             }
 
-            if let Err(why) = debian::gpg_release(&sources.email, &release_path, &release_gpg_path) {
+            if let Err(why) = debian::gpg_release(&sources.email, &release_path, &release_gpg_path)
+            {
                 eprintln!("failed to generate Release.gpg file: {}", why);
                 exit(1);
             }

@@ -1,10 +1,10 @@
-use std::io::{self, Write};
 use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use deflate::Compression;
 use deflate::write::GzEncoder;
+use deflate::Compression;
 use xz2::read::XzEncoder;
 
 use sources::Config;
@@ -23,7 +23,7 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
     let mut gz_file = File::create(path.join("Packages.gz"))?;
     let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
     compressor.write_all(&package)?;
-    let _= compressor.finish()?;
+    let _ = compressor.finish()?;
 
     let mut xz_file = File::create(path.join("Packages.xz"))?;
     let mut compressor = XzEncoder::new(package.as_slice(), 9);
@@ -44,21 +44,36 @@ pub(crate) fn generate_dists_release(config: &Config, release_path: &Path) -> io
     eprintln!("generating dists release files");
     let release = Command::new("apt-ftparchive")
         .arg("-o")
-        .arg(format!("APT::FTPArchive::Release::Origin={}", config.origin))
+        .arg(format!(
+            "APT::FTPArchive::Release::Origin={}",
+            config.origin
+        ))
         .arg("-o")
         .arg(format!("APT::FTPArchive::Release::Label={}", config.label))
         .arg("-o")
-        .arg(format!("APT::FTPArchive::Release::Suite={}", config.archive))
+        .arg(format!(
+            "APT::FTPArchive::Release::Suite={}",
+            config.archive
+        ))
         .arg("-o")
-        .arg(format!("APT::FTPArchive::Release::Version={}", config.version))
+        .arg(format!(
+            "APT::FTPArchive::Release::Version={}",
+            config.version
+        ))
         .arg("-o")
-        .arg(format!("APT::FTPArchive::Release::Codename={}", config.archive))
+        .arg(format!(
+            "APT::FTPArchive::Release::Codename={}",
+            config.archive
+        ))
         .arg("-o")
         .arg("APT::FTPArchive::Release::Architectures=amd64")
         .arg("-o")
         .arg("APT::FTPArchive::Release::Components=main")
         .arg("-o")
-        .arg(format!("APT::FTPArchive::Release::Description={} ({} {})", config.label, config.archive, config.version))
+        .arg(format!(
+            "APT::FTPArchive::Release::Description={} ({} {})",
+            config.label, config.archive, config.version
+        ))
         .arg("release")
         .arg(".")
         .output()
@@ -85,11 +100,14 @@ pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) 
         .arg(release_path)
         .status()?;
 
-        if exit_status.success() {
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "gpg_in_release failed"))
-        }
+    if exit_status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "gpg_in_release failed",
+        ))
+    }
 }
 
 pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
@@ -109,9 +127,9 @@ pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> 
         .arg(release_path)
         .status()?;
 
-        if exit_status.success() {
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "gpg_release failed"))
-        }
+    if exit_status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::new(io::ErrorKind::Other, "gpg_release failed"))
+    }
 }
