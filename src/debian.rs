@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use deflate::Compression;
-use deflate::write::ZlibEncoder;
+use deflate::write::GzEncoder;
 use xz2::read::XzEncoder;
 
 use sources::Config;
@@ -21,7 +21,7 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
         .map(|data| data.stdout)?;
 
     let mut gz_file = File::create(path.join("Packages.gz"))?;
-    let mut compressor = ZlibEncoder::new(&mut gz_file, Compression::Best);
+    let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
     compressor.write_all(&package)?;
     let _= compressor.finish()?;
 

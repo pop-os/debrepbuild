@@ -13,4 +13,4 @@ reqwest = "0.8.5"
 rayon = "1.0.1"
 tempdir = "0.3.7"
 xz2 = "0.1.4"
-deflate = "0.7.18"
+deflate = { version = "0.7.18", features = ["gzip"] }
