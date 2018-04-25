@@ -1,0 +1,13 @@
+[package]
+name = "debrepbuild"
+version = "0.1.0"
+authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
+
+[dependencies]
+serde = "1.0.43"
+toml = "0.4.6"
+serde_derive = "1.0.43"
+failure = "0.1.1"
+failure_derive = "0.1.1"
+reqwest = "0.8.5"
+rayon = "1.0.1"

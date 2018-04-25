@@ -1,0 +1,27 @@
+[[direct]]
+name = "atom-editor"
+version = "1.26.0"
+identifier = "18.04"
+arch = "amd64"
+url = "https://atom-installer.github.com/v1.26.0/atom-amd64.deb"
+
+[[direct]]
+name = "mattermost-desktop"
+version = "4.0.1"
+identifier = "18.04"
+arch = "amd64"
+url = "https://releases.mattermost.com/desktop/4.0.1/mattermost-desktop-4.0.1-linux-amd64.deb"
+
+[[direct]]
+name = "slack-desktop"
+version = "3.1.1"
+identifier = "18.04"
+arch = "amd64"
+url = "https://downloads.slack-edge.com/linux_releases/slack-desktop-3.1.1-amd64.deb"
+
+[[direct]]
+name = "vscode"
+version = "1.22.2"
+identifier = "18.04"
+arch = "amd64"
+url = "https://az764295.vo.msecnd.net/stable/3aeede733d9a3098f7b4bdc1f66b63b0f48c1ef9/code_1.22.2-1523551015_amd64.deb"
