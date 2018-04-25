@@ -1,9 +1,10 @@
-use std::fs::{create_dir_all, File};
-use std::io;
+use std::{
+    fs::{create_dir_all, File},
+    io,
+};
 
 use rayon::prelude::*;
-use reqwest::header::ContentLength;
-use reqwest::{self, Client, Response};
+use reqwest::{self, header::ContentLength, Client, Response};
 
 use sources::Direct;
 

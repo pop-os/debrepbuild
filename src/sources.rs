@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read},
+    path::{Path, PathBuf},
+};
 use toml::{self, de};
 
 #[derive(Debug, Fail)]
@@ -32,10 +34,6 @@ pub struct Direct {
 }
 
 impl Direct {
-    pub fn destination(&self) -> PathBuf {
-        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
-    }
-
     pub fn file_name(&self) -> String {
         [
             &self.name,
@@ -47,6 +45,10 @@ impl Direct {
             &self.arch,
             ".deb",
         ].concat()
+    }
+
+    pub fn destination(&self) -> PathBuf {
+        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
     }
 }
 
