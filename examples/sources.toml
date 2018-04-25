@@ -1,3 +1,9 @@
+archive = "bionic"
+version = "18.04"
+origin = "system76-example"
+label = "Pop!_OS Example"
+email = "michael@system76.com"
+
 [[direct]]
 name = "atom-editor"
 version = "1.26.0"

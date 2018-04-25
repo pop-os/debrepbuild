@@ -11,13 +11,18 @@ pub enum ParsingError {
     Toml { file: &'static str, why: de::Error }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
+    pub archive: String,
+    pub version: String,
+    pub origin: String,
+    pub label: String,
+    pub email: String,
     /// Packages which are already Deb packaged.
     pub direct: Vec<Direct>
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Direct {
     pub name: String,
     pub version: String,
