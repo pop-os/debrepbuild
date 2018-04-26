@@ -72,7 +72,7 @@ impl ConfigFetch for Config {
                         key.split_at(key.find('.').unwrap_or(key.len()));
 
                     return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() != 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
                         None => None,
                     };
@@ -82,7 +82,7 @@ impl ConfigFetch for Config {
                         key.split_at(key.find('.').unwrap_or(key.len()));
 
                     return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() != 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
                         None => None,
                     };
@@ -110,7 +110,7 @@ impl ConfigFetch for Config {
                         .iter_mut()
                         .find(|d| d.name.as_str() == direct_key)
                     {
-                        Some(ref mut direct) if direct_field.len() != 1 => {
+                        Some(ref mut direct) if direct_field.len() > 1 => {
                             direct.update(&direct_field[1..], value)
                         }
                         _ => Err(ConfigError::InvalidKey),
@@ -124,7 +124,7 @@ impl ConfigFetch for Config {
                         .iter_mut()
                         .find(|d| d.name.as_str() == direct_key)
                     {
-                        Some(ref mut direct) if direct_field.len() != 1 => {
+                        Some(ref mut direct) if direct_field.len() > 1 => {
                             direct.update(&direct_field[1..], value)
                         }
                         _ => Err(ConfigError::InvalidKey),
