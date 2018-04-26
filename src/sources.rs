@@ -26,27 +26,110 @@ pub struct Config {
     pub source: Vec<Source>,
 }
 
+pub trait ConfigFetch {
+    fn fetch(&self, key: &str) -> Option<&str>;
+}
+
+impl ConfigFetch for Config {
+    fn fetch(&self, key: &str) -> Option<&str> {
+        match key {
+            "archive" => Some(&self.archive),
+            "version" => Some(&self.version),
+            "origin" => Some(&self.origin),
+            "label" => Some(&self.label),
+            "email" => Some(&self.email),
+            _ => {
+                if key.starts_with("direct.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+                    if direct_field.len() == 1 {
+                        unimplemented!()
+                    } else {
+                        return self.direct
+                            .iter()
+                            .find(|d| d.name.as_str() == direct_key)
+                            .and_then(|d| d.fetch(&direct_field[1..]));
+                    }
+                }
+
+                None
+            }
+        }
+    }
+}
+
+pub trait PackageEntry {
+    fn destination(&self) -> PathBuf;
+    fn file_name(&self) -> String;
+    fn get_name(&self) -> &str;
+    fn get_url(&self) -> &str;
+    fn get_version(&self) -> &str;
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Direct {
-    pub name:       String,
-    pub version:    String,
-    pub arch:       String,
-    pub url:        String,
+    pub name:    String,
+    pub version: String,
+    pub arch:    String,
+    pub url:     String,
+}
+
+impl ConfigFetch for Direct {
+    fn fetch(&self, key: &str) -> Option<&str> {
+        match key {
+            "name" => Some(&self.name),
+            "version" => Some(&self.version),
+            "arch" => Some(&self.arch),
+            "url" => Some(&self.url),
+            _ => None,
+        }
+    }
+}
+
+impl PackageEntry for Direct {
+    fn get_version(&self) -> &str { &self.version }
+
+    fn get_url(&self) -> &str { &self.url }
+
+    fn get_name(&self) -> &str { &self.name }
+
+    fn file_name(&self) -> String {
+        [
+            self.get_name(),
+            "_",
+            self.get_version(),
+            "_",
+            &self.arch,
+            ".deb",
+        ].concat()
+    }
+
+    fn destination(&self) -> PathBuf {
+        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
+    }
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Source {
     pub name: String,
     pub version: String,
+    pub cvs: String,
     pub url: String,
+    /// Post-obtain, pre-build commands
+    pub prebuild: Vec<String>,
 }
 
-impl Direct {
-    pub fn file_name(&self) -> String {
-        [&self.name, "_", &self.version, "_", &self.arch, ".deb"].concat()
-    }
+impl PackageEntry for Source {
+    fn get_version(&self) -> &str { &self.version }
 
-    pub fn destination(&self) -> PathBuf {
+    fn get_url(&self) -> &str { &self.url }
+
+    fn get_name(&self) -> &str { &self.name }
+
+    fn file_name(&self) -> String { "".into() }
+
+    fn destination(&self) -> PathBuf {
         PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
     }
 }
