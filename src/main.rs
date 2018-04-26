@@ -12,18 +12,18 @@ extern crate failure_derive;
 extern crate serde_derive;
 
 mod cli;
+pub mod config;
 pub mod debian;
 pub mod download;
-pub mod sources;
 
-use std::{path::PathBuf, process::exit, fs};
+use std::{fs, path::PathBuf, process::exit};
 
 use cli::Action;
+use config::{Config, ConfigFetch};
 use download::DownloadResult;
-use sources::{Config, ConfigFetch};
 
 fn main() {
-    match sources::parse() {
+    match config::parse() {
         Ok(mut sources) => match cli::requested_action() {
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
@@ -88,7 +88,10 @@ fn update_repository(sources: &Config) {
     let branch = &sources.archive;
     if let Some(ref sources) = sources.source {
         let _ = fs::create_dir("sources");
-        for (id, result) in download::parallel_sources(sources, branch).into_iter().enumerate() {
+        for (id, result) in download::parallel_sources(sources, branch)
+            .into_iter()
+            .enumerate()
+        {
             let name = &sources[id].name;
             match result {
                 Ok(DownloadResult::AlreadyExists) => {

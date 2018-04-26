@@ -9,7 +9,7 @@ use std::{
 use rayon::prelude::*;
 use reqwest::{self, header::ContentLength, Client, Response};
 
-use sources::{Direct, PackageEntry, Source};
+use config::{Direct, PackageEntry, Source};
 
 #[derive(Debug, Fail)]
 pub enum DownloadError {
@@ -165,7 +165,10 @@ pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> 
         .collect()
 }
 
-pub fn parallel_sources(items: &[Source], branch: &str) -> Vec<Result<DownloadResult, DownloadError>> {
+pub fn parallel_sources(
+    items: &[Source],
+    branch: &str,
+) -> Vec<Result<DownloadResult, DownloadError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()

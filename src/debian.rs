@@ -9,7 +9,7 @@ use std::{
 use deflate::{write::GzEncoder, Compression};
 use xz2::read::XzEncoder;
 
-use sources::Config;
+use config::Config;
 
 pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<()> {
     eprintln!("generating binary files");
