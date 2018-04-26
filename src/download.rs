@@ -30,7 +30,7 @@ pub enum DownloadResult {
 }
 
 fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult, DownloadError> {
-    eprintln!("downloading {}", item.get_name());
+    eprintln!(" - {}", item.get_name());
 
     let parent = item.destination();
     let filename = item.file_name();

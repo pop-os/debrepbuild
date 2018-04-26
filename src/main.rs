@@ -33,6 +33,7 @@ fn main() {
                     exit(1);
                 }
             },
+            Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
             Action::Update(key, value) => match sources.update(&key, value) {
                 Ok(()) => match sources.write_to_disk() {
                     Ok(()) => eprintln!("successfully wrote config changes to disk"),
@@ -63,7 +64,6 @@ fn main() {
 }
 
 fn update_repository(sources: &Config) {
-    eprintln!("DEBUG: Generated Config: {:#?}", sources);
     let ddl_sources = &sources.direct;
     let mut package_failed = false;
     for (id, result) in download::parallel(ddl_sources).into_iter().enumerate() {

@@ -11,6 +11,11 @@ See the examples directory for an example of the current syntax for the project.
 debrepbuild
 ```
 
+### Pretty-print the sources.toml configuration
+```
+debrepbuild config
+```
+
 ### Fetch a field from the configuration file
 ```
 debrepbuild config direct.atom-editor.version

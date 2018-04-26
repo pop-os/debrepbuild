@@ -3,6 +3,7 @@ use std::env;
 pub enum Action {
     UpdateRepository,
     Fetch(String),
+    FetchConfig,
     Update(String, String),
     ConfigHelp,
     Unsupported,
@@ -19,6 +20,7 @@ pub fn requested_action() -> Action {
         ) {
             (Some(key), Some("="), Some(value)) => Action::Update(key, value),
             (Some(key), None, None) => Action::Fetch(key),
+            (None, None, None) => Action::FetchConfig,
             _ => Action::ConfigHelp,
         },
         Some(false) => Action::Unsupported,
