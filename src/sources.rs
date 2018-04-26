@@ -36,7 +36,7 @@ pub struct Config {
     /// Packages which are already Deb packaged.
     pub direct: Vec<Direct>,
     /// Projects which can be built from source
-    pub source: Vec<Source>,
+    pub source: Option<Vec<Source>>,
 }
 
 impl Config {
