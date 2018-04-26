@@ -11,6 +11,7 @@ use reqwest::{self, header::ContentLength, Client, Response};
 
 use config::{Direct, PackageEntry, Source};
 
+/// Possible errors that may happen when attempting to download Debian packages and source code.
 #[derive(Debug, Fail)]
 pub enum DownloadError {
     #[fail(display = "build command failed: {}", why)]
@@ -29,12 +30,14 @@ pub enum DownloadError {
     UnsupportedCVS { cvs: String },
 }
 
+/// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
     Downloaded(u64),
     AlreadyExists,
     BuildSucceeded,
 }
 
+/// Given an item with a URL, download the item if the item does not already exist.
 fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult, DownloadError> {
     eprintln!(" - {}", item.get_name());
 
@@ -86,6 +89,7 @@ fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult
         })
 }
 
+/// Compares the length reported by the requested header to the length of existing file.
 fn check_length(response: &Response, compared: u64) -> bool {
     response
         .headers()
@@ -94,6 +98,7 @@ fn check_length(response: &Response, compared: u64) -> bool {
         .unwrap_or(0) == compared
 }
 
+/// Attempts to build Debian packages from a given software repository.
 fn build(item: &Source, path: &Path, branch: &str) -> Result<DownloadResult, DownloadError> {
     let _ = env::set_current_dir(path);
     if let Some(ref prebuild) = item.prebuild {
@@ -124,6 +129,7 @@ fn build(item: &Source, path: &Path, branch: &str) -> Result<DownloadResult, Dow
     }
 }
 
+/// Downloads the source repository via git, then attempts to build it.
 fn download_git(item: &Source, branch: &str) -> Result<DownloadResult, DownloadError> {
     let path = PathBuf::from(["sources/", item.get_name()].concat());
 
@@ -156,6 +162,7 @@ fn download_git(item: &Source, branch: &str) -> Result<DownloadResult, DownloadE
     build(item, &path, branch)
 }
 
+/// Downloads pre-built Debian packages in parallel
 pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> {
     eprintln!("downloading packages in parallel");
     let client = Client::new();
@@ -165,6 +172,7 @@ pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> 
         .collect()
 }
 
+/// Downloads source code repositories and builds them in parallel.
 pub fn parallel_sources(
     items: &[Source],
     branch: &str,

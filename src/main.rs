@@ -16,7 +16,7 @@ pub mod config;
 pub mod debian;
 pub mod download;
 
-use std::{fs, path::PathBuf, process::exit};
+use std::{fs, io, path::PathBuf, process::exit};
 
 use cli::Action;
 use config::{Config, ConfigFetch};
@@ -63,6 +63,7 @@ fn main() {
     }
 }
 
+/// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {
     let ddl_sources = &sources.direct;
     let mut package_failed = false;
@@ -116,27 +117,38 @@ fn update_repository(sources: &Config) {
         exit(1);
     }
 
-    if let Err(why) = debian::generate_binary_files(&sources, "amd64") {
-        eprintln!("failed to generate files for binaries: {}", why);
+    if let Err(why) = generate_release_files(&sources) {
+        eprintln!("{}", why);
         exit(1);
     }
+}
 
-    let release_path = PathBuf::from(["dists/", &sources.archive, "/Release"].concat());
-    let in_release_path = PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
-    let release_gpg_path = PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
+#[derive(Debug, Fail)]
+pub enum ReleaseError {
+    #[fail(display = "failed to generate release files for binaries: {}", why)]
+    Binary { why: io::Error },
+    #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
+    Dists { archive: String, why: io::Error },
+    #[fail(display = "failed to generate InRelease file: {}", why)]
+    InRelease { why: io::Error },
+    #[fail(display = "failed to generate Release.gpg file: {}", why)]
+    ReleaseGPG { why: io::Error },
+}
 
-    if let Err(why) = debian::generate_dists_release(&sources) {
-        eprintln!("failed to generate release file for dists: {}", why);
-        exit(1);
-    }
+/// Generate the dist release files from the existing binary and source files.
+fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
+    let release = PathBuf::from(["dists/", &sources.archive, "/Release"].concat());
+    let in_release = PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
+    let release_gpg = PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
 
-    if let Err(why) = debian::gpg_in_release(&sources.email, &release_path, &in_release_path) {
-        eprintln!("failed to generate InRelease file: {}", why);
-        exit(1);
-    }
+    debian::generate_binary_files(&sources, "amd64").map_err(|why| ReleaseError::Binary { why })?;
 
-    if let Err(why) = debian::gpg_release(&sources.email, &release_path, &release_gpg_path) {
-        eprintln!("failed to generate Release.gpg file: {}", why);
-        exit(1);
-    }
+    debian::generate_dists_release(&sources)
+        .map_err(|why| ReleaseError::Dists { archive: sources.archive.clone(), why })?;
+
+    debian::gpg_in_release(&sources.email, &release, &in_release)
+        .map_err(|why| ReleaseError::InRelease { why })?;
+
+    debian::gpg_release(&sources.email, &release, &release_gpg)
+        .map_err(|why| ReleaseError::ReleaseGPG { why })
 }

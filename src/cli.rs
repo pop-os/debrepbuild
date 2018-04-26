@@ -1,5 +1,6 @@
 use std::env;
 
+/// Possible actions that the user may request when running the application.
 #[derive(Debug, PartialEq)]
 pub enum Action {
     UpdateRepository,
@@ -10,8 +11,12 @@ pub enum Action {
     Unsupported,
 }
 
+/// Checks the values that have been passed into the program, and returns the action
+/// that the user requested.
 pub fn requested_action() -> Action { get_action(env::args().skip(1)) }
 
+/// Source code responsible for fetching an action from a given iterator.
+/// Exists seperately from `requested_action` for testing purposes.
 fn get_action<I: Iterator<Item = String>>(mut args: I) -> Action {
     match args.next().as_ref().map(|arg| arg.as_str() == "config") {
         None => Action::UpdateRepository,

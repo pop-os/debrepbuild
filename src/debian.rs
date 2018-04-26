@@ -11,6 +11,8 @@ use xz2::read::XzEncoder;
 
 use config::Config;
 
+/// Generates the binary files from Debian packages that exist within the pool, using
+/// `apt-ftparchive`
 pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<()> {
     eprintln!("generating binary files");
     let path = PathBuf::from(["dists/", &config.archive, "/main/binary-", arch, "/"].concat());
@@ -45,6 +47,7 @@ pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<(
     Ok(())
 }
 
+/// Generates the dists release file via `apt-ftparchive`.
 pub(crate) fn generate_dists_release(config: &Config) -> io::Result<()> {
     eprintln!("generating dists release files");
 
@@ -94,6 +97,7 @@ pub(crate) fn generate_dists_release(config: &Config) -> io::Result<()> {
     env::set_current_dir(cwd)
 }
 
+/// Generates the `InRelease` file from the `Release` file via `gpg --clearsign`.
 pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
     eprintln!("generating InRelease file");
     let exit_status = Command::new("gpg")
@@ -121,6 +125,7 @@ pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) 
     }
 }
 
+/// Generates the `Release.gpg` file from the `Release` file via `gpg -abs`
 pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
     eprintln!("generating Release.gpg file");
     let exit_status = Command::new("gpg")
