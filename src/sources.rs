@@ -1,20 +1,32 @@
 use std::{
     borrow::Cow,
     fs::File,
-    io::{self, Read},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 use toml::{self, de};
+
+const SOURCES: &'static str = "sources.toml";
 
 #[derive(Debug, Fail)]
 pub enum ParsingError {
     #[fail(display = "error reading '{}': {}", file, why)]
     File { file: &'static str, why:  io::Error },
+    #[fail(display = "error writing '{}': {}", file, why)]
+    FileWrite { file: &'static str, why:  io::Error },
     #[fail(display = "failed to parse TOML syntax in {}: {}", file, why)]
     Toml { file: &'static str, why:  de::Error },
+    #[fail(display = "failed to serialize into TOML: {}", why)]
+    TomlSerialize { why: toml::ser::Error },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Fail)]
+pub enum ConfigError {
+    #[fail(display = "provided config key was not found")]
+    InvalidKey,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub archive: String,
     pub version: String,
@@ -27,11 +39,69 @@ pub struct Config {
     pub source: Vec<Source>,
 }
 
+impl Config {
+    pub fn write_to_disk(&self) -> Result<(), ParsingError> {
+        toml::ser::to_vec(self)
+            .map_err(|why| ParsingError::TomlSerialize { why })
+            .and_then(|data| {
+                File::create(SOURCES)
+                    .and_then(|mut file| file.write_all(&data))
+                    .map_err(|why| ParsingError::FileWrite { file: SOURCES, why })
+            })
+    }
+}
+
 pub trait ConfigFetch {
     fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>>;
+    fn update(&mut self, key: &str, value: String) -> Result<(), ConfigError>;
 }
 
 impl ConfigFetch for Config {
+    fn update(&mut self, key: &str, value: String) -> Result<(), ConfigError> {
+        match key {
+            "archive" => self.archive = value,
+            "version" => self.version = value,
+            "origin" => self.origin = value,
+            "label" => self.label = value,
+            "email" => self.email = value,
+            _ => {
+                if key.starts_with("direct.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+
+                    return match self.direct
+                        .iter_mut()
+                        .find(|d| d.name.as_str() == direct_key)
+                    {
+                        Some(ref mut direct) if direct_field.len() != 1 => {
+                            direct.update(&direct_field[1..], value)
+                        }
+                        _ => Err(ConfigError::InvalidKey),
+                    };
+                } else if key.starts_with("source.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+
+                    return match self.direct
+                        .iter_mut()
+                        .find(|d| d.name.as_str() == direct_key)
+                    {
+                        Some(ref mut direct) if direct_field.len() != 1 => {
+                            direct.update(&direct_field[1..], value)
+                        }
+                        _ => Err(ConfigError::InvalidKey),
+                    };
+                }
+
+                return Err(ConfigError::InvalidKey);
+            }
+        }
+
+        Ok(())
+    }
+
     fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
         match key {
             "archive" => Some(Cow::Borrowed(&self.archive)),
@@ -47,20 +117,20 @@ impl ConfigFetch for Config {
                         key.split_at(key.find('.').unwrap_or(key.len()));
 
                     return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() == 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) if direct_field.len() != 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
-                        None => None
-                    }
+                        None => None,
+                    };
                 } else if key.starts_with("source.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
                         key.split_at(key.find('.').unwrap_or(key.len()));
 
                     return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() == 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) if direct_field.len() != 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
-                        None => None
-                    }
+                        None => None,
+                    };
                 }
 
                 None
@@ -77,7 +147,7 @@ pub trait PackageEntry {
     fn get_version(&self) -> &str;
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Direct {
     pub name:    String,
     pub version: String,
@@ -86,6 +156,18 @@ pub struct Direct {
 }
 
 impl ConfigFetch for Direct {
+    fn update(&mut self, key: &str, value: String) -> Result<(), ConfigError> {
+        match key {
+            "name" => self.name = value,
+            "version" => self.version = value,
+            "arch" => self.arch = value,
+            "url" => self.url = value,
+            _ => return Err(ConfigError::InvalidKey),
+        }
+
+        Ok(())
+    }
+
     fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
         match key {
             "name" => Some(Cow::Borrowed(&self.name)),
@@ -98,11 +180,9 @@ impl ConfigFetch for Direct {
 }
 
 impl PackageEntry for Direct {
-    fn get_version(&self) -> &str { &self.version }
-
-    fn get_url(&self) -> &str { &self.url }
-
-    fn get_name(&self) -> &str { &self.name }
+    fn destination(&self) -> PathBuf {
+        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
+    }
 
     fn file_name(&self) -> String {
         [
@@ -115,12 +195,14 @@ impl PackageEntry for Direct {
         ].concat()
     }
 
-    fn destination(&self) -> PathBuf {
-        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
-    }
+    fn get_name(&self) -> &str { &self.name }
+
+    fn get_url(&self) -> &str { &self.url }
+
+    fn get_version(&self) -> &str { &self.version }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
     pub name: String,
     pub version: String,
@@ -131,20 +213,18 @@ pub struct Source {
 }
 
 impl PackageEntry for Source {
-    fn get_version(&self) -> &str { &self.version }
-
-    fn get_url(&self) -> &str { &self.url }
-
-    fn get_name(&self) -> &str { &self.name }
-
-    fn file_name(&self) -> String { "".into() }
-
     fn destination(&self) -> PathBuf {
         PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
     }
-}
 
-const SOURCES: &'static str = "sources.toml";
+    fn file_name(&self) -> String { "".into() }
+
+    fn get_name(&self) -> &str { &self.name }
+
+    fn get_url(&self) -> &str { &self.url }
+
+    fn get_version(&self) -> &str { &self.version }
+}
 
 // NOTE: This was stabilized in Rust 1.26.0
 fn read<P: AsRef<Path>>(path: P) -> io::Result<String> {

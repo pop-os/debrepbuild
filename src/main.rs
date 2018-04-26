@@ -24,7 +24,7 @@ use sources::{Config, ConfigFetch};
 
 fn main() {
     match sources::parse() {
-        Ok(sources) => match cli::requested_action() {
+        Ok(mut sources) => match cli::requested_action() {
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
                 Some(value) => println!("{}: {}", key, value),
@@ -33,7 +33,19 @@ fn main() {
                     exit(1);
                 }
             },
-            Action::Update(..) => unimplemented!(),
+            Action::Update(key, value) => match sources.update(&key, value) {
+                Ok(()) => match sources.write_to_disk() {
+                    Ok(()) => eprintln!("successfully wrote config changes to disk"),
+                    Err(why) => {
+                        eprintln!("failed to write config changes: {}", why);
+                        exit(1);
+                    }
+                },
+                Err(why) => {
+                    eprintln!("failed to update {}: {}", key, why);
+                    exit(1);
+                }
+            },
             Action::ConfigHelp => {
                 println!("config key[.field] [value]");
                 exit(1);

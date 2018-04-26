@@ -16,7 +16,7 @@ debrepbuild
 debrepbuild config direct.atom-editor.version
 ```
 
-### Update a field in the configuration file (TODO)
+### Update a field in the configuration file
 ```
 deprepbuild config direct.atom-editor.version = ${NEW_VERSION}
 deprepbuild config direct.atom-editor.url = ${NEW_URL}
