@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
@@ -27,29 +28,38 @@ pub struct Config {
 }
 
 pub trait ConfigFetch {
-    fn fetch(&self, key: &str) -> Option<&str>;
+    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>>;
 }
 
 impl ConfigFetch for Config {
-    fn fetch(&self, key: &str) -> Option<&str> {
+    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
         match key {
-            "archive" => Some(&self.archive),
-            "version" => Some(&self.version),
-            "origin" => Some(&self.origin),
-            "label" => Some(&self.label),
-            "email" => Some(&self.email),
+            "archive" => Some(Cow::Borrowed(&self.archive)),
+            "version" => Some(Cow::Borrowed(&self.version)),
+            "origin" => Some(Cow::Borrowed(&self.origin)),
+            "label" => Some(Cow::Borrowed(&self.label)),
+            "email" => Some(Cow::Borrowed(&self.email)),
+            "direct" => Some(Cow::Owned(format!("{:#?}", self.direct))),
             _ => {
                 if key.starts_with("direct.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
                         key.split_at(key.find('.').unwrap_or(key.len()));
-                    if direct_field.len() == 1 {
-                        unimplemented!()
-                    } else {
-                        return self.direct
-                            .iter()
-                            .find(|d| d.name.as_str() == direct_key)
-                            .and_then(|d| d.fetch(&direct_field[1..]));
+
+                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                        Some(direct) if direct_field.len() == 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
+                        None => None
+                    }
+                } else if key.starts_with("source.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+
+                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                        Some(direct) if direct_field.len() == 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
+                        None => None
                     }
                 }
 
@@ -76,12 +86,12 @@ pub struct Direct {
 }
 
 impl ConfigFetch for Direct {
-    fn fetch(&self, key: &str) -> Option<&str> {
+    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
         match key {
-            "name" => Some(&self.name),
-            "version" => Some(&self.version),
-            "arch" => Some(&self.arch),
-            "url" => Some(&self.url),
+            "name" => Some(Cow::Borrowed(&self.name)),
+            "version" => Some(Cow::Borrowed(&self.version)),
+            "arch" => Some(Cow::Borrowed(&self.arch)),
+            "url" => Some(Cow::Borrowed(&self.url)),
             _ => None,
         }
     }
