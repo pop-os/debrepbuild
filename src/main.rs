@@ -20,7 +20,7 @@ use std::{fs, io, path::PathBuf, process::exit};
 
 use cli::Action;
 use config::{Config, ConfigFetch};
-use download::DownloadResult;
+use download::{DownloadResult, SourceResult};
 
 fn main() {
     match config::parse() {
@@ -76,9 +76,6 @@ fn update_repository(sources: &Config) {
             Ok(DownloadResult::Downloaded(bytes)) => {
                 eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
             }
-            Ok(DownloadResult::BuildSucceeded) => {
-                eprintln!("package '{}' was successfully fetched & compiled", name);
-            }
             Err(why) => {
                 eprintln!("package '{}' failed to download: {}", name, why);
                 package_failed = true;
@@ -95,13 +92,7 @@ fn update_repository(sources: &Config) {
         {
             let name = &sources[id].name;
             match result {
-                Ok(DownloadResult::AlreadyExists) => {
-                    eprintln!("package '{}' already exists", name);
-                }
-                Ok(DownloadResult::Downloaded(bytes)) => {
-                    eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
-                }
-                Ok(DownloadResult::BuildSucceeded) => {
+                Ok(SourceResult::BuildSucceeded) => {
                     eprintln!("package '{}' was successfully fetched & compiled", name);
                 }
                 Err(why) => {
@@ -128,7 +119,7 @@ pub enum ReleaseError {
     #[fail(display = "failed to generate release files for binaries: {}", why)]
     Binary { why: io::Error },
     #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
-    Dists { archive: String, why: io::Error },
+    Dists { archive: String, why:     io::Error },
     #[fail(display = "failed to generate InRelease file: {}", why)]
     InRelease { why: io::Error },
     #[fail(display = "failed to generate Release.gpg file: {}", why)]
@@ -143,8 +134,10 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
 
     debian::generate_binary_files(&sources, "amd64").map_err(|why| ReleaseError::Binary { why })?;
 
-    debian::generate_dists_release(&sources)
-        .map_err(|why| ReleaseError::Dists { archive: sources.archive.clone(), why })?;
+    debian::generate_dists_release(&sources).map_err(|why| ReleaseError::Dists {
+        archive: sources.archive.clone(),
+        why,
+    })?;
 
     debian::gpg_in_release(&sources.email, &release, &in_release)
         .map_err(|why| ReleaseError::InRelease { why })?;

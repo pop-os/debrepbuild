@@ -14,18 +14,22 @@ use config::{Direct, PackageEntry, Source};
 /// Possible errors that may happen when attempting to download Debian packages and source code.
 #[derive(Debug, Fail)]
 pub enum DownloadError {
+    #[fail(display = "unable to download '{}': {}", item, why)]
+    Request { item: String, why:  reqwest::Error },
+    #[fail(display = "unable to open '{}': {}", item, why)]
+    File { item: String, why:  io::Error },
+}
+
+#[derive(Debug, Fail)]
+pub enum SourceError {
     #[fail(display = "build command failed: {}", why)]
     BuildCommand { why: io::Error },
     #[fail(display = "failed to build from source")]
     BuildFailed,
-    #[fail(display = "unable to download '{}': {}", item, why)]
-    Request { item: String, why:  reqwest::Error },
     #[fail(display = "git command failed")]
     GitFailed,
     #[fail(display = "unable to git '{}': {}", item, why)]
     GitRequest { item: String, why:  io::Error },
-    #[fail(display = "unable to open '{}': {}", item, why)]
-    File { item: String, why:  io::Error },
     #[fail(display = "unsupported cvs for source: {}", cvs)]
     UnsupportedCVS { cvs: String },
 }
@@ -34,6 +38,9 @@ pub enum DownloadError {
 pub enum DownloadResult {
     Downloaded(u64),
     AlreadyExists,
+}
+
+pub enum SourceResult {
     BuildSucceeded,
 }
 
@@ -99,17 +106,17 @@ fn check_length(response: &Response, compared: u64) -> bool {
 }
 
 /// Attempts to build Debian packages from a given software repository.
-fn build(item: &Source, path: &Path, branch: &str) -> Result<DownloadResult, DownloadError> {
+fn build(item: &Source, path: &Path, branch: &str) -> Result<SourceResult, SourceError> {
     let _ = env::set_current_dir(path);
     if let Some(ref prebuild) = item.prebuild {
         for command in prebuild {
             let exit_status = Command::new("sh")
                 .args(&["-c", command])
                 .status()
-                .map_err(|why| DownloadError::BuildCommand { why })?;
+                .map_err(|why| SourceError::BuildCommand { why })?;
 
             if !exit_status.success() {
-                return Err(DownloadError::BuildFailed);
+                return Err(SourceError::BuildFailed);
             }
         }
     }
@@ -120,42 +127,42 @@ fn build(item: &Source, path: &Path, branch: &str) -> Result<DownloadResult, Dow
         .arg("--quiet")
         .arg(".")
         .status()
-        .map_err(|why| DownloadError::BuildCommand { why })?;
+        .map_err(|why| SourceError::BuildCommand { why })?;
 
     if exit_status.success() {
-        Ok(DownloadResult::BuildSucceeded)
+        Ok(SourceResult::BuildSucceeded)
     } else {
-        Err(DownloadError::BuildFailed)
+        Err(SourceError::BuildFailed)
     }
 }
 
 /// Downloads the source repository via git, then attempts to build it.
-fn download_git(item: &Source, branch: &str) -> Result<DownloadResult, DownloadError> {
+fn download_git(item: &Source, branch: &str) -> Result<SourceResult, SourceError> {
     let path = PathBuf::from(["sources/", item.get_name()].concat());
 
     if path.exists() {
         let exit_status = Command::new("git")
             .args(&["-C", "sources", "pull", "origin", "master"])
             .status()
-            .map_err(|why| DownloadError::GitRequest {
+            .map_err(|why| SourceError::GitRequest {
                 item: item.get_name().to_owned(),
                 why,
             })?;
 
         if !exit_status.success() {
-            return Err(DownloadError::GitFailed);
+            return Err(SourceError::GitFailed);
         }
     } else {
         let exit_status = Command::new("git")
             .args(&["-C", "sources", "clone", item.get_url()])
             .status()
-            .map_err(|why| DownloadError::GitRequest {
+            .map_err(|why| SourceError::GitRequest {
                 item: item.get_name().to_owned(),
                 why,
             })?;
 
         if !exit_status.success() {
-            return Err(DownloadError::GitFailed);
+            return Err(SourceError::GitFailed);
         }
     }
 
@@ -173,16 +180,13 @@ pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> 
 }
 
 /// Downloads source code repositories and builds them in parallel.
-pub fn parallel_sources(
-    items: &[Source],
-    branch: &str,
-) -> Vec<Result<DownloadResult, DownloadError>> {
+pub fn parallel_sources(items: &[Source], branch: &str) -> Vec<Result<SourceResult, SourceError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()
         .map(|item| match item.cvs.as_str() {
             "git" => download_git(item, branch),
-            _ => Err(DownloadError::UnsupportedCVS {
+            _ => Err(SourceError::UnsupportedCVS {
                 cvs: item.cvs.clone(),
             }),
         })

@@ -63,6 +63,42 @@ pub trait ConfigFetch {
 }
 
 impl ConfigFetch for Config {
+    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
+        match key {
+            "archive" => Some(Cow::Borrowed(&self.archive)),
+            "version" => Some(Cow::Borrowed(&self.version)),
+            "origin" => Some(Cow::Borrowed(&self.origin)),
+            "label" => Some(Cow::Borrowed(&self.label)),
+            "email" => Some(Cow::Borrowed(&self.email)),
+            "direct" => Some(Cow::Owned(format!("{:#?}", self.direct))),
+            _ => {
+                if key.starts_with("direct.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+
+                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
+                        None => None,
+                    };
+                } else if key.starts_with("source.") {
+                    let key = &key[7..];
+                    let (direct_key, direct_field) =
+                        key.split_at(key.find('.').unwrap_or(key.len()));
+
+                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
+                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
+                        None => None,
+                    };
+                }
+
+                None
+            }
+        }
+    }
+
     fn update(&mut self, key: &str, value: String) -> Result<(), ConfigError> {
         match key {
             "archive" => self.archive = value,
@@ -107,42 +143,6 @@ impl ConfigFetch for Config {
 
         Ok(())
     }
-
-    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
-        match key {
-            "archive" => Some(Cow::Borrowed(&self.archive)),
-            "version" => Some(Cow::Borrowed(&self.version)),
-            "origin" => Some(Cow::Borrowed(&self.origin)),
-            "label" => Some(Cow::Borrowed(&self.label)),
-            "email" => Some(Cow::Borrowed(&self.email)),
-            "direct" => Some(Cow::Owned(format!("{:#?}", self.direct))),
-            _ => {
-                if key.starts_with("direct.") {
-                    let key = &key[7..];
-                    let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
-
-                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
-                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
-                        None => None,
-                    };
-                } else if key.starts_with("source.") {
-                    let key = &key[7..];
-                    let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
-
-                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
-                        Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
-                        Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
-                        None => None,
-                    };
-                }
-
-                None
-            }
-        }
-    }
 }
 
 /// Methods shared between `Direct` and `Source` structures.
@@ -164,6 +164,16 @@ pub struct Direct {
 }
 
 impl ConfigFetch for Direct {
+    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
+        match key {
+            "name" => Some(Cow::Borrowed(&self.name)),
+            "version" => Some(Cow::Borrowed(&self.version)),
+            "arch" => Some(Cow::Borrowed(&self.arch)),
+            "url" => Some(Cow::Borrowed(&self.url)),
+            _ => None,
+        }
+    }
+
     fn update(&mut self, key: &str, value: String) -> Result<(), ConfigError> {
         match key {
             "name" => self.name = value,
@@ -175,22 +185,14 @@ impl ConfigFetch for Direct {
 
         Ok(())
     }
-
-    fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
-        match key {
-            "name" => Some(Cow::Borrowed(&self.name)),
-            "version" => Some(Cow::Borrowed(&self.version)),
-            "arch" => Some(Cow::Borrowed(&self.arch)),
-            "url" => Some(Cow::Borrowed(&self.url)),
-            _ => None,
-        }
-    }
 }
 
 impl PackageEntry for Direct {
-    fn destination(&self) -> PathBuf {
-        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
-    }
+    fn get_version(&self) -> &str { &self.version }
+
+    fn get_url(&self) -> &str { &self.url }
+
+    fn get_name(&self) -> &str { &self.name }
 
     fn file_name(&self) -> String {
         [
@@ -203,11 +205,9 @@ impl PackageEntry for Direct {
         ].concat()
     }
 
-    fn get_name(&self) -> &str { &self.name }
-
-    fn get_url(&self) -> &str { &self.url }
-
-    fn get_version(&self) -> &str { &self.version }
+    fn destination(&self) -> PathBuf {
+        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -221,17 +221,17 @@ pub struct Source {
 }
 
 impl PackageEntry for Source {
-    fn destination(&self) -> PathBuf {
-        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
-    }
-
-    fn file_name(&self) -> String { "".into() }
-
-    fn get_name(&self) -> &str { &self.name }
+    fn get_version(&self) -> &str { &self.version }
 
     fn get_url(&self) -> &str { &self.url }
 
-    fn get_version(&self) -> &str { &self.version }
+    fn get_name(&self) -> &str { &self.name }
+
+    fn file_name(&self) -> String { "".into() }
+
+    fn destination(&self) -> PathBuf {
+        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
+    }
 }
 
 // NOTE: This was stabilized in Rust 1.26.0
