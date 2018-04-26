@@ -26,7 +26,7 @@ fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadEr
 
     let parent = item.destination();
     let filename = item.file_name();
-    let destination = parent.join(&filename);
+    let destination = parent.join(filename);
 
     let dest_result = if destination.exists() {
         let mut capacity = File::open(&destination)

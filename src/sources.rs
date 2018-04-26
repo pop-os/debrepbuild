@@ -22,29 +22,27 @@ pub struct Config {
     pub email: String,
     /// Packages which are already Deb packaged.
     pub direct: Vec<Direct>,
+    /// Projects which can be built from source
+    pub source: Vec<Source>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Direct {
     pub name:       String,
-    pub version:    String,
-    pub identifier: String,
     pub arch:       String,
     pub url:        String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Source {
+    pub name: String,
+    pub version: String,
+    pub url: String,
+}
+
 impl Direct {
-    pub fn file_name(&self) -> String {
-        [
-            &self.name,
-            "_",
-            &self.version,
-            "-",
-            &self.identifier,
-            "_",
-            &self.arch,
-            ".deb",
-        ].concat()
+    pub fn file_name(&self) -> &str {
+        &self.url[self.url.rfind('/').unwrap() + 1..]
     }
 
     pub fn destination(&self) -> PathBuf {
