@@ -104,7 +104,7 @@ fn update_repository(sources: &Config) {
                     eprintln!("package '{}' was successfully fetched & compiled", name);
                 }
                 Err(why) => {
-                    eprintln!("package '{}' failed to download: {}", name, why);
+                    eprintln!("package '{}' failed to build: {}", name, why);
                     package_failed = true;
                 }
             }

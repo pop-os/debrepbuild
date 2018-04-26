@@ -242,3 +242,61 @@ pub fn parse() -> Result<Config, ParsingError> {
             toml::from_str(&buffer).map_err(|why| ParsingError::Toml { file: SOURCES, why })
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const EXAMPLE: &str = r#"archive = "bionic"
+    version = "18.04"
+    origin = "system76-example"
+    label = "Pop!_OS Example"
+    email = "michael@system76.com"
+
+    [[direct]]
+    name = "atom-editor"
+    version = "1.26.0"
+    arch = "amd64"
+    url = "https://atom-installer.github.com/v1.26.0/atom-amd64.deb"
+
+    [[direct]]
+    name = "code"
+    version = "1.22.2-1523551015"
+    arch = "amd64"
+    url = "https://az764295.vo.msecnd.net/stable/3aeede733d9a3098f7b4bdc1f66b63b0f48c1ef9/code_1.22.2-1523551015_amd64.deb""#;
+
+    #[test]
+    fn fetch() {
+        let config = toml::from_str::<Config>(EXAMPLE).unwrap();
+
+        assert_eq!(config.fetch("version").as_ref().unwrap(), "18.04");
+        assert_eq!(
+            config.fetch("direct.atom-editor.version").as_ref().unwrap(),
+            "1.26.0"
+        );
+        assert_eq!(
+            config.fetch("direct.code.version").as_ref().unwrap(),
+            "1.22.2-1523551015"
+        );
+    }
+
+    #[test]
+    fn update() {
+        let mut config = toml::from_str::<Config>(EXAMPLE).unwrap();
+
+        assert_eq!(config.fetch("archive").as_ref().unwrap(), "bionic");
+        config.update("archive", "redox".into()).unwrap();
+        assert_eq!(config.fetch("archive").as_ref().unwrap(), "redox");
+
+        assert_eq!(
+            config.fetch("direct.atom-editor.version").as_ref().unwrap(),
+            "1.26.0"
+        );
+        config
+            .update("direct.atom-editor.version", "1.27.0".into())
+            .unwrap();
+        assert_eq!(
+            config.fetch("direct.atom-editor.version").as_ref().unwrap(),
+            "1.27.0"
+        );
+    }
+}
