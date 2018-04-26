@@ -81,7 +81,7 @@ fn check_length(response: &Response, compared: u64) -> bool {
 }
 
 pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> {
-    eprintln!("downloading direct download packages in parallel");
+    eprintln!("downloading packages in parallel");
     let client = Client::new();
     items
         .par_iter()

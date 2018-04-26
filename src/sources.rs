@@ -29,6 +29,7 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Direct {
     pub name:       String,
+    pub version:    String,
     pub arch:       String,
     pub url:        String,
 }
@@ -41,8 +42,8 @@ pub struct Source {
 }
 
 impl Direct {
-    pub fn file_name(&self) -> &str {
-        &self.url[self.url.rfind('/').unwrap() + 1..]
+    pub fn file_name(&self) -> String {
+        [&self.name, "_", &self.version, "_", &self.arch, ".deb"].concat()
     }
 
     pub fn destination(&self) -> PathBuf {
