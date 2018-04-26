@@ -2,3 +2,4 @@
 **/*.rs.bk
 /examples/pool
 /examples/dists
+/examples/sources

@@ -16,7 +16,7 @@ pub mod debian;
 pub mod download;
 pub mod sources;
 
-use std::{path::PathBuf, process::exit};
+use std::{path::PathBuf, process::exit, fs};
 
 use cli::Action;
 use download::DownloadResult;
@@ -75,12 +75,35 @@ fn update_repository(sources: &Config) {
             Ok(DownloadResult::Downloaded(bytes)) => {
                 eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
             }
-            Ok(DownloadResult::GitSucceeded) => {
-                eprintln!("package '{}' was successfully fetched via git", name);
+            Ok(DownloadResult::BuildSucceeded) => {
+                eprintln!("package '{}' was successfully fetched & compiled", name);
             }
             Err(why) => {
                 eprintln!("package '{}' failed to download: {}", name, why);
                 package_failed = true;
+            }
+        }
+    }
+
+    let branch = &sources.archive;
+    if let Some(ref sources) = sources.source {
+        let _ = fs::create_dir("sources");
+        for (id, result) in download::parallel_sources(sources, branch).into_iter().enumerate() {
+            let name = &sources[id].name;
+            match result {
+                Ok(DownloadResult::AlreadyExists) => {
+                    eprintln!("package '{}' already exists", name);
+                }
+                Ok(DownloadResult::Downloaded(bytes)) => {
+                    eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
+                }
+                Ok(DownloadResult::BuildSucceeded) => {
+                    eprintln!("package '{}' was successfully fetched & compiled", name);
+                }
+                Err(why) => {
+                    eprintln!("package '{}' failed to download: {}", name, why);
+                    package_failed = true;
+                }
             }
         }
     }

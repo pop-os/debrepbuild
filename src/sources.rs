@@ -209,7 +209,7 @@ pub struct Source {
     pub cvs: String,
     pub url: String,
     /// Post-obtain, pre-build commands
-    pub prebuild: Vec<String>,
+    pub prebuild: Option<Vec<String>>,
 }
 
 impl PackageEntry for Source {

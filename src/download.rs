@@ -1,6 +1,8 @@
 use std::{
+    env,
     fs::{create_dir_all, File},
     io,
+    path::{Path, PathBuf},
     process::Command,
 };
 
@@ -11,6 +13,10 @@ use sources::{Direct, PackageEntry, Source};
 
 #[derive(Debug, Fail)]
 pub enum DownloadError {
+    #[fail(display = "build command failed: {}", why)]
+    BuildCommand { why: io::Error },
+    #[fail(display = "failed to build from source")]
+    BuildFailed,
     #[fail(display = "unable to download '{}': {}", item, why)]
     Request { item: String, why:  reqwest::Error },
     #[fail(display = "git command failed")]
@@ -26,7 +32,7 @@ pub enum DownloadError {
 pub enum DownloadResult {
     Downloaded(u64),
     AlreadyExists,
-    GitSucceeded,
+    BuildSucceeded,
 }
 
 fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult, DownloadError> {
@@ -88,20 +94,66 @@ fn check_length(response: &Response, compared: u64) -> bool {
         .unwrap_or(0) == compared
 }
 
-fn download_git(item: &str, url: &str) -> Result<DownloadResult, DownloadError> {
-    let exit_status = Command::new("git")
-        .args(&["clone", url])
+fn build(item: &Source, path: &Path, branch: &str) -> Result<DownloadResult, DownloadError> {
+    let _ = env::set_current_dir(path);
+    if let Some(ref prebuild) = item.prebuild {
+        for command in prebuild {
+            let exit_status = Command::new("sh")
+                .args(&["-c", command])
+                .status()
+                .map_err(|why| DownloadError::BuildCommand { why })?;
+
+            if !exit_status.success() {
+                return Err(DownloadError::BuildFailed);
+            }
+        }
+    }
+
+    let exit_status = Command::new("sbuild")
+        .arg("--arch-all")
+        .arg(format!("--dist={}", branch))
+        .arg("--quiet")
+        .arg(".")
         .status()
-        .map_err(|why| DownloadError::GitRequest {
-            item: item.to_owned(),
-            why,
-        })?;
+        .map_err(|why| DownloadError::BuildCommand { why })?;
 
     if exit_status.success() {
-        Ok(DownloadResult::GitSucceeded)
+        Ok(DownloadResult::BuildSucceeded)
     } else {
-        Err(DownloadError::GitFailed)
+        Err(DownloadError::BuildFailed)
     }
+}
+
+fn download_git(item: &Source, branch: &str) -> Result<DownloadResult, DownloadError> {
+    let path = PathBuf::from(["sources/", item.get_name()].concat());
+
+    if path.exists() {
+        let exit_status = Command::new("git")
+            .args(&["-C", "sources", "pull", "origin", "master"])
+            .status()
+            .map_err(|why| DownloadError::GitRequest {
+                item: item.get_name().to_owned(),
+                why,
+            })?;
+
+        if !exit_status.success() {
+            return Err(DownloadError::GitFailed);
+        }
+    } else {
+        let exit_status = Command::new("git")
+            .args(&["-C", "sources", "clone", item.get_url()])
+            .status()
+            .map_err(|why| DownloadError::GitRequest {
+                item: item.get_name().to_owned(),
+                why,
+            })?;
+
+        if !exit_status.success() {
+            return Err(DownloadError::GitFailed);
+        }
+    }
+
+    build(item, &path, branch)
 }
 
 pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> {
@@ -113,12 +165,12 @@ pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> 
         .collect()
 }
 
-pub fn parallel_sources(items: &[Source]) -> Vec<Result<DownloadResult, DownloadError>> {
+pub fn parallel_sources(items: &[Source], branch: &str) -> Vec<Result<DownloadResult, DownloadError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()
         .map(|item| match item.cvs.as_str() {
-            "git" => download_git(item.get_name(), item.get_url()),
+            "git" => download_git(item, branch),
             _ => Err(DownloadError::UnsupportedCVS {
                 cvs: item.cvs.clone(),
             }),
