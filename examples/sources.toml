@@ -11,6 +11,12 @@ arch = "amd64"
 url = "https://atom-installer.github.com/v1.26.0/atom-amd64.deb"
 
 [[direct]]
+name = "atom-editor-beta"
+version = "1.27.0-beta0"
+arch = "amd64"
+url = "https://github.com/atom/atom/releases/download/v1.27.0-beta0/atom-amd64.deb"
+
+[[direct]]
 name = "mattermost-desktop"
 version = "4.0.1"
 arch = "amd64"
