@@ -13,36 +13,52 @@ use config::Config;
 
 /// Generates the binary files from Debian packages that exist within the pool, using
 /// `apt-ftparchive`
-pub(crate) fn generate_binary_files(config: &Config, arch: &str) -> io::Result<()> {
+pub(crate) fn generate_binary_files(config: &Config) -> io::Result<()> {
     eprintln!("generating binary files");
-    let path = PathBuf::from(["dists/", &config.archive, "/main/binary-", arch, "/"].concat());
-    fs::create_dir_all(&path)?;
+    let branch = PathBuf::from(["dists/", &config.archive, "/main/"].concat());
+    fs::create_dir_all(&branch)?;
 
-    let package = Command::new("apt-ftparchive")
-        .arg("packages")
-        .arg("pool/main")
-        .output()
-        .map(|data| data.stdout)?;
+    for directory in fs::read_dir("pool/main")? {
+        let entry = directory?;
+        let arch = entry.file_name();
+        let path = branch.join(&arch);
+        fs::create_dir_all(&path)?;
 
-    let mut uncompressed_packages = File::create(path.join("Packages"))?;
-    uncompressed_packages.write_all(&package)?;
+        let package = Command::new("apt-ftparchive")
+            .arg("packages")
+            .arg(PathBuf::from("pool/main").join(&arch))
+            .output()
+            .map(|data| data.stdout)?;
 
-    let mut gz_file = File::create(path.join("Packages.gz"))?;
-    let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
-    compressor.write_all(&package)?;
-    let _ = compressor.finish()?;
+        let mut uncompressed_packages = File::create(path.join("Packages"))?;
+        uncompressed_packages.write_all(&package)?;
 
-    let mut xz_file = File::create(path.join("Packages.xz"))?;
-    let mut compressor = XzEncoder::new(package.as_slice(), 9);
-    io::copy(&mut compressor, &mut xz_file)?;
+        let mut gz_file = File::create(path.join("Packages.gz"))?;
+        let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
+        compressor.write_all(&package)?;
+        let _ = compressor.finish()?;
 
-    let mut release = File::create(path.join("Release"))?;
-    writeln!(&mut release, "Archive: {}", config.archive)?;
-    writeln!(&mut release, "Version: {}", config.version)?;
-    writeln!(&mut release, "Component: main")?;
-    writeln!(&mut release, "Origin: {}", config.origin)?;
-    writeln!(&mut release, "Label: {}", config.label)?;
-    writeln!(&mut release, "Architecture: {}", arch)?;
+        let mut xz_file = File::create(path.join("Packages.xz"))?;
+        let mut compressor = XzEncoder::new(package.as_slice(), 9);
+        io::copy(&mut compressor, &mut xz_file)?;
+
+        let mut release = File::create(path.join("Release"))?;
+        writeln!(&mut release, "Archive: {}", config.archive)?;
+        writeln!(&mut release, "Version: {}", config.version)?;
+        writeln!(&mut release, "Component: main")?;
+        writeln!(&mut release, "Origin: {}", config.origin)?;
+        writeln!(&mut release, "Label: {}", config.label)?;
+        writeln!(
+            &mut release,
+            "Architecture: {}",
+            match arch.to_str().unwrap() {
+                "binary-amd64" => "amd64",
+                "binary-i386" => "i386",
+                "binary-all" => "all",
+                arch => panic!("unsupported architecture: {}", arch),
+            }
+        )?;
+    }
 
     Ok(())
 }
@@ -79,7 +95,7 @@ pub(crate) fn generate_dists_release(config: &Config) -> io::Result<()> {
             config.archive
         ))
         .arg("-o")
-        .arg("APT::FTPArchive::Release::Architectures=amd64")
+        .arg("APT::FTPArchive::Release::Architectures=i386 amd64 all")
         .arg("-o")
         .arg("APT::FTPArchive::Release::Components=main")
         .arg("-o")

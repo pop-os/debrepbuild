@@ -132,7 +132,7 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let in_release = PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
     let release_gpg = PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
 
-    debian::generate_binary_files(&sources, "amd64").map_err(|why| ReleaseError::Binary { why })?;
+    debian::generate_binary_files(&sources).map_err(|why| ReleaseError::Binary { why })?;
 
     debian::generate_dists_release(&sources).map_err(|why| ReleaseError::Dists {
         archive: sources.archive.clone(),
