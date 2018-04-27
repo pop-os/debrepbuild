@@ -48,9 +48,27 @@ url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/p
 
 [[direct]]
 name = "signal-desktop"
-version = ""
+version = "1.8.0"
 arch = "amd64"
 url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_1.8.0_amd64.deb"
+
+[[direct]]
+name = "steam"
+version = "1.0.0.54"
+arch = "i386"
+url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam_1.0.0.54+repack-5ubuntu1_i386.deb"
+
+[[direct]]
+name = "steam-installer"
+version = "1.0.0.54"
+arch = "all"
+url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-installer_1.0.0.54+repack-5ubuntu1_all.deb"
+
+[[direct]]
+name = "steam-devices"
+version = "1.0.0.54"
+arch = "all"
+url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-devices_1.0.0.54+repack-5ubuntu1_all.deb"
 
 #[[source]]
 #name = "peek"
