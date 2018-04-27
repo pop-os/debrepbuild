@@ -10,11 +10,11 @@ version = "1.26.0"
 arch = "amd64"
 url = "https://atom-installer.github.com/v1.26.0/atom-amd64.deb"
 
-[[direct]]
-name = "atom-editor-beta"
-version = "1.27.0-beta0"
-arch = "amd64"
-url = "https://github.com/atom/atom/releases/download/v1.27.0-beta0/atom-amd64.deb"
+# [[direct]]
+# name = "atom-editor-beta"
+# version = "1.27.0-beta0"
+# arch = "amd64"
+# url = "https://github.com/atom/atom/releases/download/v1.27.0-beta0/atom-amd64.deb"
 
 [[direct]]
 name = "mattermost-desktop"
@@ -53,6 +53,12 @@ arch = "amd64"
 url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_1.8.0_amd64.deb"
 
 [[direct]]
+name = "google-chrome-stable"
+version = "66.0.3359.139-1"
+arch = "amd64"
+url = "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+
+[[direct]]
 name = "steam"
 version = "1.0.0.54"
 arch = "i386"
@@ -69,6 +75,18 @@ name = "steam-devices"
 version = "1.0.0.54"
 arch = "all"
 url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-devices_1.0.0.54+repack-5ubuntu1_all.deb"
+
+[[direct]]
+name = "android-studio"
+version = "173.4720617"
+arch = "amd64"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4720617~bionic_amd64.deb"
+
+[[direct]]
+name = "android-studio-preview"
+version = "181.4720098"
+arch = "amd64"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/android-studio-preview_181.4720098~bionic_amd64.deb"
 
 #[[source]]
 #name = "peek"
