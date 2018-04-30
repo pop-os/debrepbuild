@@ -53,7 +53,7 @@ fn main() {
             Action::UpdatePackages => if let Err(why) = update_packages(&mut sources) {
                 eprintln!("failed to update config: {}", why);
                 exit(1);
-            }
+            },
             Action::ConfigHelp => {
                 println!("config key[.field] [value]");
                 exit(1);

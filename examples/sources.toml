@@ -70,6 +70,13 @@ version = "1.8.0"
 arch = "amd64"
 url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_1.8.0_amd64.deb"
 
+[direct.update]
+source = "github"
+url = "signalapp/Signal-Desktop"
+after = "/v"
+before = ""
+build_from = ["https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/", "signal-desktop_", "_amd64.deb"]
+
 [[direct]]
 name = "google-chrome-stable"
 version = "66.0.3359.139-1"
