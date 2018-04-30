@@ -208,3 +208,26 @@ fn get_before<'a>(origin: &'a str, before: &str) -> Option<&'a str> {
 fn between<'a>(origin: &'a str, after: &str, before: &str) -> Option<&'a str> {
     get_after(origin, after).and_then(|origin| get_before(origin, before))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions() {
+        assert_eq!(
+            get_after("/atom/atom/releases/download/v1.26.1/atom-amd64.deb", "download/v"),
+            Some("1.26.1/atom-amd64.deb")
+        );
+
+        assert_eq!(
+            get_before("1.26.1/atom-amd64.deb", "/atom"),
+            Some("1.26.1")
+        );
+
+        assert_eq!(
+            between("/atom/atom/releases/download/v1.26.1/atom-amd64.deb", "download/v", "/atom"),
+            Some("1.26.1")
+        );
+    }
+}
