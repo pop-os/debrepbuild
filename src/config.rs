@@ -160,6 +160,7 @@ pub struct Update {
     pub url: String,
     pub after: String,
     pub before: String,
+    pub contains: Option<String>,
 }
 
 /// A Debian package which already exists and may be downloaded directly.

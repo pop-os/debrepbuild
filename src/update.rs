@@ -38,6 +38,14 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                     let urls = document
                         .find(Name("a"))
                         .filter_map(|n| n.attr("href"))
+                        .filter_map(|n| match update.contains {
+                            Some(ref contains) => if n.contains(contains) {
+                                Some(n)
+                            } else {
+                                None
+                            },
+                            None => Some(n)
+                        })
                         .collect::<Vec<&str>>();
 
                     for link in urls.into_iter().rev() {
@@ -77,7 +85,15 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
 
                     let urls = document
                         .find(Name("a"))
-                        .filter_map(|n| n.attr("href"));
+                        .filter_map(|n| n.attr("href"))
+                        .filter_map(|n| match update.contains {
+                            Some(ref contains) => if n.contains(contains) {
+                                Some(n)
+                            } else {
+                                None
+                            },
+                            None => Some(n)
+                        });
 
                     for link in urls {
                         if link.ends_with(".deb") {
