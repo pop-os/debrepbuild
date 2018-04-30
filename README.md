@@ -26,3 +26,12 @@ debrepbuild config direct.atom-editor.version
 deprepbuild config direct.atom-editor.version = ${NEW_VERSION}
 deprepbuild config direct.atom-editor.url = ${NEW_URL}
 ```
+
+### Automatically update configurations
+
+`direct` packages can be automatically updated if they have a `update`
+table specified.
+
+```
+debrepbuild update
+```
