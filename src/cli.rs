@@ -3,12 +3,13 @@ use std::env;
 /// Possible actions that the user may request when running the application.
 #[derive(Debug, PartialEq)]
 pub enum Action {
-    UpdateRepository,
+    ConfigHelp,
     Fetch(String),
     FetchConfig,
-    Update(String, String),
-    ConfigHelp,
     Unsupported,
+    UpdatePackages,
+    Update(String, String),
+    UpdateRepository,
 }
 
 /// Checks the values that have been passed into the program, and returns the action
@@ -18,9 +19,9 @@ pub fn requested_action() -> Action { get_action(env::args().skip(1)) }
 /// Source code responsible for fetching an action from a given iterator.
 /// Exists seperately from `requested_action` for testing purposes.
 fn get_action<I: Iterator<Item = String>>(mut args: I) -> Action {
-    match args.next().as_ref().map(|arg| arg.as_str() == "config") {
+    match args.next().as_ref().map(|x| x.as_str()) {
         None => Action::UpdateRepository,
-        Some(true) => match (
+        Some("config") => match (
             args.next(),
             args.next().as_ref().map(|x| x.as_str()),
             args.next(),
@@ -30,7 +31,8 @@ fn get_action<I: Iterator<Item = String>>(mut args: I) -> Action {
             (None, None, None) => Action::FetchConfig,
             _ => Action::ConfigHelp,
         },
-        Some(false) => Action::Unsupported,
+        Some("update") => Action::UpdatePackages,
+        Some(_) => Action::Unsupported,
     }
 }
 

@@ -2,6 +2,7 @@ extern crate deflate;
 extern crate failure;
 extern crate rayon;
 extern crate reqwest;
+extern crate select;
 extern crate serde;
 extern crate toml;
 extern crate xz2;
@@ -15,12 +16,14 @@ mod cli;
 pub mod config;
 pub mod debian;
 pub mod download;
+mod update;
 
 use std::{fs, io, path::PathBuf, process::exit};
 
 use cli::Action;
 use config::{Config, ConfigFetch};
 use download::{DownloadResult, SourceResult};
+use update::update_packages;
 
 fn main() {
     match config::parse() {
@@ -47,6 +50,10 @@ fn main() {
                     exit(1);
                 }
             },
+            Action::UpdatePackages => if let Err(why) = update_packages(&mut sources) {
+                eprintln!("failed to update config: {}", why);
+                exit(1);
+            }
             Action::ConfigHelp => {
                 println!("config key[.field] [value]");
                 exit(1);

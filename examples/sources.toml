@@ -6,21 +6,27 @@ email = "michael@system76.com"
 
 [[direct]]
 name = "atom-editor"
-version = "1.26.0"
+version = "1.26.1"
 arch = "amd64"
-url = "https://atom-installer.github.com/v1.26.0/atom-amd64.deb"
+url = "https://github.com/atom/atom/releases/download/v1.26.1/atom-amd64.deb"
 
-# [[direct]]
-# name = "atom-editor-beta"
-# version = "1.27.0-beta0"
-# arch = "amd64"
-# url = "https://github.com/atom/atom/releases/download/v1.27.0-beta0/atom-amd64.deb"
+[direct.update]
+source = "github"
+url = "atom/atom"
+after = "/v"
+before = "/atom"
 
 [[direct]]
 name = "mattermost-desktop"
 version = "4.0.1"
 arch = "amd64"
 url = "https://releases.mattermost.com/desktop/4.0.1/mattermost-desktop-4.0.1-linux-amd64.deb"
+
+[direct.update]
+source = "github"
+url = "mattermost/desktop"
+after = "desktop/"
+before = "/mattermost"
 
 [[direct]]
 name = "slack-desktop"
@@ -34,6 +40,12 @@ version = "1.0.79.223.g92622cc2-21"
 arch = "amd64"
 url = "http://repository.spotify.com/pool/non-free/s/spotify-client/spotify-client_1.0.79.223.g92622cc2-21_amd64.deb"
 
+[direct.update]
+source = "directory"
+url = "http://repository.spotify.com/pool/non-free/s/spotify-client/"
+after = "client_"
+before = "_amd64"
+
 [[direct]]
 name = "code"
 version = "1.22.2-1523551015"
@@ -45,6 +57,12 @@ name = "peek"
 version = "1.3.1-0~ppa23"
 arch = "amd64"
 url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/peek_1.3.1-0~ppa23~ubuntu18.04.1_amd64.deb"
+
+[direct.update]
+source = "directory"
+url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/"
+after = "peek_"
+before = "~ubuntu"
 
 [[direct]]
 name = "signal-desktop"
@@ -93,10 +111,3 @@ name = "gitkraken"
 version = "3.5.1"
 arch = "amd64"
 url = "https://release.gitkraken.com/linux/gitkraken-amd64.deb"
-
-#[[source]]
-#name = "peek"
-#version = "1.3.1"
-#cvs = "git"
-#url = "https://github.com/phw/peek"
-#prebuild = ["git checkout origin/debian-packaging -- debian/"]

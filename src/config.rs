@@ -154,6 +154,14 @@ pub trait PackageEntry {
     fn get_version(&self) -> &str;
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Update {
+    pub source: String,
+    pub url: String,
+    pub after: String,
+    pub before: String,
+}
+
 /// A Debian package which already exists and may be downloaded directly.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Direct {
@@ -161,6 +169,7 @@ pub struct Direct {
     pub version: String,
     pub arch:    String,
     pub url:     String,
+    pub update:  Option<Update>
 }
 
 impl ConfigFetch for Direct {
