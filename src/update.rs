@@ -28,7 +28,45 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
     'outer: for direct in &mut sources.direct {
         if let Some(ref update) = direct.update {
             match update.source.as_str() {
-                "directory" => (),
+                "directory" => {
+                    let response = client.get(&update.url)
+                        .send()
+                        .map_err(|why| UpdateError::Request { why })?;
+
+                    let document = Document::from_read(response).unwrap();
+
+                    let urls = document
+                        .find(Name("a"))
+                        .filter_map(|n| n.attr("href"))
+                        .collect::<Vec<&str>>();
+
+                    for link in urls.into_iter().rev() {
+                        if link.ends_with(match direct.arch.as_str() {
+                            "amd64" => "amd64.deb",
+                            "i386" => "i386.deb",
+                            _ => ".deb"
+                        }) {
+                            match between(&link, &update.after, &update.before) {
+                                Some(version) => {
+                                    let url = if update.url.ends_with('/') {
+                                        [&update.url, link].concat()
+                                    } else {
+                                        [&update.url, "/", link].concat()
+                                    };
+
+                                    direct.version = version.to_owned();
+                                    direct.url = url.to_string();
+
+                                    eprintln!("updated {}:\n  version: {}\n  url: {}", direct.name, version, url);
+                                    continue 'outer
+                                }
+                                None => {
+                                    return Err(UpdateError::NoVersion { link: link.to_owned() });
+                                }
+                            }
+                        }
+                    }
+                },
                 "github" => {
                     let url = ["https://github.com/", &update.url, "/releases/latest/"].concat();
                     let response = client.get(&url)
@@ -72,6 +110,8 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                 },
                 _ => ()
             }
+        } else {
+            eprintln!("warning: {} requires manual updating", direct.name);
         }
     }
 

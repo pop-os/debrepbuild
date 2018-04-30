@@ -98,13 +98,25 @@ url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-devices
 name = "android-studio"
 version = "173.4720617"
 arch = "amd64"
-url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4720617~bionic_amd64.deb"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4720617~xenial_amd64.deb"
+
+[direct.update]
+source = "directory"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/"
+after = "studio_"
+before = "~"
 
 [[direct]]
 name = "android-studio-preview"
 version = "181.4720098"
 arch = "amd64"
-url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/android-studio-preview_181.4720098~bionic_amd64.deb"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/android-studio-preview_181.4720098~xenial_amd64.deb"
+
+[direct.update]
+source = "directory"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/"
+after = "preview_"
+before = "~"
 
 [[direct]]
 name = "gitkraken"
