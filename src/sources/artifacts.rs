@@ -17,18 +17,19 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
 
     if let Some(dst_ino) = dst.as_ref().metadata().ok().map(|m| m.ino()) {
         if let Some(src_ino) = src.metadata().ok().map(|m| m.ino()) {
-            if src_ino != dst_ino
-                || dst
+            if src_ino == dst_ino
+                && !dst
                     .as_ref()
                     .symlink_metadata()
                     .unwrap()
                     .file_type()
                     .is_symlink()
             {
+                eprintln!("link already found");
+                return Ok(LinkedArtifact(dst.to_owned().to_path_buf()));
+            } else {
                 eprintln!("removing {}", dst.display());
                 fs::remove_file(&dst).map_err(|why| SourceError::LinkRemoval { why })?;
-            } else {
-                return Ok(LinkedArtifact(dst.to_owned().to_path_buf()));
             }
         }
     }

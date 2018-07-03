@@ -19,9 +19,6 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
     let pwd = env::current_dir().unwrap();
     let cwd = pwd.join(path);
 
-    let _ = fs::create_dir_all("build/record");
-    let _ = env::set_current_dir("build");
-
     let mut linked: Vec<LinkedArtifact> = Vec::new();
 
     if let Some(ref artifacts) = item.artifacts {
@@ -35,6 +32,9 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
             }
         }
     }
+
+    let _ = fs::create_dir_all("build/record");
+    let _ = env::set_current_dir("build");
 
     if let Some(ref prebuild) = item.prebuild {
         eprintln!("prebuilding {}", item.get_name());
