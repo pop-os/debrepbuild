@@ -19,6 +19,10 @@ pub enum ParsingError {
     Toml { file: &'static str, why:  de::Error },
     #[fail(display = "failed to serialize into TOML: {}", why)]
     TomlSerialize { why: toml::ser::Error },
+    #[fail(display = "source URL and path defined for {}. Only one should be defined.", source)]
+    SourcePathAndUrlDefined { source: String },
+    #[fail(display = "neither a URL or path was defined for the source named {}", source)]
+    SourceNotDefined { source: String }
 }
 
 #[derive(Debug, Fail)]
@@ -256,8 +260,9 @@ pub struct SourceArtifact {
 pub struct Source {
     pub name:      String,
     pub version:   String,
-    pub cvs:       String,
-    pub url:       String,
+    pub cvs:       Option<String>,
+    pub url:       Option<String>,
+    pub path:      Option<String>,
     pub members:   Option<Vec<SourceMember>>,
     pub artifacts: Option<Vec<SourceArtifact>>,
     pub prebuild:  Option<Vec<String>>,
@@ -267,7 +272,11 @@ pub struct Source {
 impl PackageEntry for Source {
     fn get_version(&self) -> &str { &self.version }
 
-    fn get_url(&self) -> &str { &self.url }
+    fn get_url(&self) -> &str {
+        self.url.as_ref()
+            .or_else(|| self.path.as_ref())
+            .unwrap().as_str()
+    }
 
     fn get_name(&self) -> &str { &self.name }
 
@@ -279,11 +288,28 @@ impl PackageEntry for Source {
 }
 
 pub fn parse() -> Result<Config, ParsingError> {
-    fs::read(SOURCES)
+    let config: Config = fs::read(SOURCES)
         .map_err(|why| ParsingError::File { file: SOURCES, why })
         .and_then(|buffer| {
             toml::from_slice(&buffer).map_err(|why| ParsingError::Toml { file: SOURCES, why })
-        })
+        })?;
+
+    // Verify config
+    if let Some(ref sources) = config.source {
+        for source in sources {
+            if source.path.is_none() && source.url.is_none() {
+                return Err(ParsingError::SourceNotDefined {
+                    source: source.name.clone()
+                });
+            } else if source.path.is_some() && source.url.is_some() {
+                return Err(ParsingError::SourcePathAndUrlDefined {
+                    source: source.name.clone()
+                });
+            }
+        }
+    }
+
+    Ok(config)
 }
 
 #[cfg(test)]

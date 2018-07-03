@@ -1,18 +1,21 @@
 use super::{build::build, SourceError};
 use config::{PackageEntry, Source};
 use rayon::prelude::*;
-use std::{path::PathBuf, process::Command};
+use std::{path::{Path, PathBuf}, process::Command};
 
 /// Downloads source code repositories and builds them in parallel.
 pub fn parallel(items: &[Source], branch: &str) -> Vec<Result<(), SourceError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()
-        .map(|item| match item.cvs.as_str() {
-            "git" => download_git(item, branch),
-            _ => Err(SourceError::UnsupportedCVS {
-                cvs: item.cvs.clone(),
-            }),
+        .map(|item| match item.path {
+            Some(ref path) => build(item, Path::new(path), branch),
+            None => match item.cvs.as_ref().map(|x| x.as_str()).unwrap_or("git") {
+                "git" => download_git(item, branch),
+                cvs => Err(SourceError::UnsupportedCVS {
+                    cvs: cvs.to_owned(),
+                }),
+            }
         })
         .collect()
 }
