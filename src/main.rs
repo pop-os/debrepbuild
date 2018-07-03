@@ -1,5 +1,6 @@
 extern crate deflate;
 extern crate failure;
+extern crate glob;
 extern crate rayon;
 extern crate reqwest;
 extern crate select;
@@ -15,14 +16,14 @@ extern crate serde_derive;
 mod cli;
 pub mod config;
 pub mod debian;
-pub mod download;
+mod direct;
+mod sources;
 mod update;
-
-use std::{fs, io, path::PathBuf, process::exit};
 
 use cli::Action;
 use config::{Config, ConfigFetch};
-use download::{DownloadResult, SourceResult};
+use direct::download::DownloadResult;
+use std::{fs, io, path::PathBuf, process::exit};
 use update::update_packages;
 
 fn main() {
@@ -72,20 +73,24 @@ fn main() {
 
 /// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {
-    let ddl_sources = &sources.direct;
     let mut package_failed = false;
-    for (id, result) in download::parallel(ddl_sources).into_iter().enumerate() {
-        let name = &ddl_sources[id].name;
-        match result {
-            Ok(DownloadResult::AlreadyExists) => {
-                eprintln!("package '{}' already exists", name);
-            }
-            Ok(DownloadResult::Downloaded(bytes)) => {
-                eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
-            }
-            Err(why) => {
-                eprintln!("package '{}' failed to download: {}", name, why);
-                package_failed = true;
+    if let Some(ref ddl_sources) = sources.direct {
+        for (id, result) in direct::download::parallel(ddl_sources)
+            .into_iter()
+            .enumerate()
+        {
+            let name = &ddl_sources[id].name;
+            match result {
+                Ok(DownloadResult::AlreadyExists) => {
+                    eprintln!("package '{}' already exists", name);
+                }
+                Ok(DownloadResult::Downloaded(bytes)) => {
+                    eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
+                }
+                Err(why) => {
+                    eprintln!("package '{}' failed to download: {}", name, why);
+                    package_failed = true;
+                }
             }
         }
     }
@@ -93,13 +98,13 @@ fn update_repository(sources: &Config) {
     let branch = &sources.archive;
     if let Some(ref sources) = sources.source {
         let _ = fs::create_dir("sources");
-        for (id, result) in download::parallel_sources(sources, branch)
+        for (id, result) in sources::download::parallel(sources, branch)
             .into_iter()
             .enumerate()
         {
             let name = &sources[id].name;
             match result {
-                Ok(SourceResult::BuildSucceeded) => {
+                Ok(()) => {
                     eprintln!("package '{}' was successfully fetched & compiled", name);
                 }
                 Err(why) => {
