@@ -21,173 +21,181 @@ pub enum UpdateError {
 }
 
 pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
-    let client = Client::new();
-    'outer: for direct in &mut sources.direct {
-        if let Some(ref update) = direct.update {
-            match update.source.as_str() {
-                "directory" => {
-                    let response = client
-                        .get(&update.url)
-                        .send()
-                        .map_err(|why| UpdateError::Request { why })?;
+    let mut write = false;
+    if let Some(ref mut direct_sources) = sources.direct {
+        let client = Client::new();
+        'outer: for direct in direct_sources {
+            if let Some(ref update) = direct.update {
+                match update.source.as_str() {
+                    "directory" => {
+                        let response = client
+                            .get(&update.url)
+                            .send()
+                            .map_err(|why| UpdateError::Request { why })?;
 
-                    let document = Document::from_read(response).unwrap();
+                        let document = Document::from_read(response).unwrap();
 
-                    let urls = document
-                        .find(Name("a"))
-                        .filter_map(|n| n.attr("href"))
-                        .filter_map(|n| match update.contains {
-                            Some(ref contains) => if n.contains(contains) {
-                                Some(n)
-                            } else {
-                                None
-                            },
-                            None => Some(n),
-                        })
-                        .collect::<Vec<&str>>();
+                        let urls = document
+                            .find(Name("a"))
+                            .filter_map(|n| n.attr("href"))
+                            .filter_map(|n| match update.contains {
+                                Some(ref contains) => if n.contains(contains) {
+                                    Some(n)
+                                } else {
+                                    None
+                                },
+                                None => Some(n),
+                            })
+                            .collect::<Vec<&str>>();
 
-                    for link in urls.into_iter().rev() {
-                        if link.ends_with(match direct.arch.as_str() {
-                            "amd64" => "amd64.deb",
-                            "i386" => "i386.deb",
-                            _ => ".deb",
-                        }) {
-                            match between(&link, &update.after, &update.before) {
-                                Some(version) => {
-                                    let url = if update.url.ends_with('/') {
-                                        [&update.url, link].concat()
+                        for link in urls.into_iter().rev() {
+                            if link.ends_with(match direct.arch.as_str() {
+                                "amd64" => "amd64.deb",
+                                "i386" => "i386.deb",
+                                _ => ".deb",
+                            }) {
+                                match between(&link, &update.after, &update.before) {
+                                    Some(version) => {
+                                        let url = if update.url.ends_with('/') {
+                                            [&update.url, link].concat()
+                                        } else {
+                                            [&update.url, "/", link].concat()
+                                        };
+
+                                        direct.version = version.to_owned();
+                                        direct.url = url.to_string();
+
+                                        eprintln!(
+                                            "updated {}:\n  version: {}\n  url: {}",
+                                            direct.name, version, url
+                                        );
+                                        continue 'outer;
+                                    }
+                                    None => {
+                                        return Err(UpdateError::NoVersion {
+                                            link: link.to_owned(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "github" => {
+                        let url =
+                            ["https://github.com/", &update.url, "/releases/latest/"].concat();
+                        match update.build_from.as_ref() {
+                            Some(ref values) => {
+                                let response = client
+                                    .get(&url)
+                                    .send()
+                                    .map_err(|why| UpdateError::Request { why })?;
+
+                                let document = Document::from_read(response).unwrap();
+                                let prefix = ["/", &update.url, "/releases/tag/"].concat();
+
+                                let mut urls = document
+                                    .find(Name("a"))
+                                    .filter_map(|n| n.attr("href"))
+                                    .filter(|n| n.starts_with(&prefix));
+
+                                if let Some(link) = urls.next() {
+                                    let version = get_after(link, &update.after).ok_or_else(
+                                        || UpdateError::NoVersion {
+                                            link: link.to_owned(),
+                                        },
+                                    )?;
+
+                                    let url = if values[0].ends_with('/') {
+                                        [&values[0], &values[1], version, &values[2]].concat()
                                     } else {
-                                        [&update.url, "/", link].concat()
+                                        [&values[0], "/", &values[1], version, &values[2]].concat()
                                     };
-
-                                    direct.version = version.to_owned();
-                                    direct.url = url.to_string();
 
                                     eprintln!(
                                         "updated {}:\n  version: {}\n  url: {}",
                                         direct.name, version, url
                                     );
+
+                                    direct.version = version.to_owned();
+                                    direct.url = url;
+
                                     continue 'outer;
                                 }
-                                None => {
-                                    return Err(UpdateError::NoVersion {
-                                        link: link.to_owned(),
+                            }
+                            None => {
+                                let response = client
+                                    .get(&url)
+                                    .send()
+                                    .map_err(|why| UpdateError::Request { why })?;
+
+                                let document = Document::from_read(response).unwrap();
+
+                                let urls = document
+                                    .find(Name("a"))
+                                    .filter_map(|n| n.attr("href"))
+                                    .filter_map(|n| match update.contains {
+                                        Some(ref contains) => if n.contains(contains) {
+                                            Some(n)
+                                        } else {
+                                            None
+                                        },
+                                        None => Some(n),
                                     });
-                                }
-                            }
-                        }
-                    }
-                }
-                "github" => {
-                    let url = ["https://github.com/", &update.url, "/releases/latest/"].concat();
-                    match update.build_from.as_ref() {
-                        Some(ref values) => {
-                            let response = client
-                                .get(&url)
-                                .send()
-                                .map_err(|why| UpdateError::Request { why })?;
 
-                            let document = Document::from_read(response).unwrap();
-                            let prefix = ["/", &update.url, "/releases/tag/"].concat();
+                                for link in urls {
+                                    if link.ends_with(".deb") {
+                                        match between(&link, &update.after, &update.before) {
+                                            Some(version) => {
+                                                let url = if link.starts_with("https:/")
+                                                    || link.starts_with("http:/")
+                                                {
+                                                    link.to_owned()
+                                                } else {
+                                                    let mut url = Url::parse(&url).map_err(
+                                                        |why| UpdateError::InvalidURL { why },
+                                                    )?;
 
-                            let mut urls = document
-                                .find(Name("a"))
-                                .filter_map(|n| n.attr("href"))
-                                .filter(|n| n.starts_with(&prefix));
+                                                    url.set_path(&link);
+                                                    url.to_string()
+                                                };
 
-                            if let Some(link) = urls.next() {
-                                let version = get_after(link, &update.after).ok_or_else(|| {
-                                    UpdateError::NoVersion {
-                                        link: link.to_owned(),
-                                    }
-                                })?;
+                                                direct.version = version.to_owned();
+                                                direct.url = url.clone();
 
-                                let url = if values[0].ends_with("/") {
-                                    [&values[0], &values[1], version, &values[2]].concat()
-                                } else {
-                                    [&values[0], "/", &values[1], version, &values[2]].concat()
-                                };
-
-                                eprintln!(
-                                    "updated {}:\n  version: {}\n  url: {}",
-                                    direct.name, version, url
-                                );
-
-                                direct.version = version.to_owned();
-                                direct.url = url;
-
-                                continue 'outer;
-                            }
-                        }
-                        None => {
-                            let response = client
-                                .get(&url)
-                                .send()
-                                .map_err(|why| UpdateError::Request { why })?;
-
-                            let document = Document::from_read(response).unwrap();
-
-                            let urls = document
-                                .find(Name("a"))
-                                .filter_map(|n| n.attr("href"))
-                                .filter_map(|n| match update.contains {
-                                    Some(ref contains) => if n.contains(contains) {
-                                        Some(n)
-                                    } else {
-                                        None
-                                    },
-                                    None => Some(n),
-                                });
-
-                            for link in urls {
-                                if link.ends_with(".deb") {
-                                    match between(&link, &update.after, &update.before) {
-                                        Some(version) => {
-                                            let url = if link.starts_with("https:/")
-                                                || link.starts_with("http:/")
-                                            {
-                                                link.to_owned()
-                                            } else {
-                                                let mut url = Url::parse(&url).map_err(|why| {
-                                                    UpdateError::InvalidURL { why }
-                                                })?;
-
-                                                url.set_path(&link);
-                                                url.to_string()
-                                            };
-
-                                            direct.version = version.to_owned();
-                                            direct.url = url.clone();
-
-                                            eprintln!(
-                                                "updated {}:\n  version: {}\n  url: {}",
-                                                direct.name, version, url
-                                            );
-                                            continue 'outer;
-                                        }
-                                        None => {
-                                            return Err(UpdateError::NoVersion {
-                                                link: link.to_owned(),
-                                            });
+                                                eprintln!(
+                                                    "updated {}:\n  version: {}\n  url: {}",
+                                                    direct.name, version, url
+                                                );
+                                                continue 'outer;
+                                            }
+                                            None => {
+                                                return Err(UpdateError::NoVersion {
+                                                    link: link.to_owned(),
+                                                });
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    return Err(UpdateError::NotFound {
-                        package: direct.name.clone(),
-                    });
+                        return Err(UpdateError::NotFound {
+                            package: direct.name.clone(),
+                        });
+                    }
+                    _ => (),
                 }
-                _ => (),
+            } else {
+                eprintln!("warning: {} requires manual updating", direct.name);
             }
-        } else {
-            eprintln!("warning: {} requires manual updating", direct.name);
         }
+
+        write = true;
     }
 
-    sources.write_to_disk()?;
+    if write {
+        sources.write_to_disk()?;
+    }
     Ok(())
 }
 
@@ -216,17 +224,21 @@ mod tests {
     #[test]
     fn versions() {
         assert_eq!(
-            get_after("/atom/atom/releases/download/v1.26.1/atom-amd64.deb", "download/v"),
+            get_after(
+                "/atom/atom/releases/download/v1.26.1/atom-amd64.deb",
+                "download/v"
+            ),
             Some("1.26.1/atom-amd64.deb")
         );
 
-        assert_eq!(
-            get_before("1.26.1/atom-amd64.deb", "/atom"),
-            Some("1.26.1")
-        );
+        assert_eq!(get_before("1.26.1/atom-amd64.deb", "/atom"), Some("1.26.1"));
 
         assert_eq!(
-            between("/atom/atom/releases/download/v1.26.1/atom-amd64.deb", "download/v", "/atom"),
+            between(
+                "/atom/atom/releases/download/v1.26.1/atom-amd64.deb",
+                "download/v",
+                "/atom"
+            ),
             Some("1.26.1")
         );
     }

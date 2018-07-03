@@ -7,7 +7,7 @@ use std::{
 use toml::{self, de};
 
 /// Currently hard-coded to search for `sources.toml` in the current working directory.
-const SOURCES: &'static str = "sources.toml";
+const SOURCES: &str = "sources.toml";
 
 #[derive(Debug, Fail)]
 pub enum ParsingError {
@@ -36,7 +36,7 @@ pub struct Config {
     pub label: String,
     pub email: String,
     /// Packages which are already Deb packaged.
-    pub direct: Vec<Direct>,
+    pub direct: Option<Vec<Direct>>,
     /// Projects which can be built from source
     pub source: Option<Vec<Source>>,
 }
@@ -75,9 +75,13 @@ impl ConfigFetch for Config {
                 if key.starts_with("direct.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
+                        key.split_at(key.find('.').unwrap_or_else(|| key.len()));
 
-                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                    return match self
+                        .direct
+                        .as_ref()
+                        .and_then(|direct| direct.iter().find(|d| d.name.as_str() == direct_key))
+                    {
                         Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
                         None => None,
@@ -85,9 +89,13 @@ impl ConfigFetch for Config {
                 } else if key.starts_with("source.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
+                        key.split_at(key.find('.').unwrap_or_else(|| key.len()));
 
-                    return match self.direct.iter().find(|d| d.name.as_str() == direct_key) {
+                    return match self
+                        .direct
+                        .as_ref()
+                        .and_then(|direct| direct.iter().find(|d| d.name.as_str() == direct_key))
+                    {
                         Some(direct) if direct_field.len() > 1 => direct.fetch(&direct_field[1..]),
                         Some(direct) => Some(Cow::Owned(format!("{:#?}", direct))),
                         None => None,
@@ -110,12 +118,11 @@ impl ConfigFetch for Config {
                 if key.starts_with("direct.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
+                        key.split_at(key.find('.').unwrap_or_else(|| key.len()));
 
-                    return match self.direct
-                        .iter_mut()
-                        .find(|d| d.name.as_str() == direct_key)
-                    {
+                    return match self.direct.as_mut().and_then(|direct| {
+                        direct.iter_mut().find(|d| d.name.as_str() == direct_key)
+                    }) {
                         Some(ref mut direct) if direct_field.len() > 1 => {
                             direct.update(&direct_field[1..], value)
                         }
@@ -124,12 +131,11 @@ impl ConfigFetch for Config {
                 } else if key.starts_with("source.") {
                     let key = &key[7..];
                     let (direct_key, direct_field) =
-                        key.split_at(key.find('.').unwrap_or(key.len()));
+                        key.split_at(key.find('.').unwrap_or_else(|| key.len()));
 
-                    return match self.direct
-                        .iter_mut()
-                        .find(|d| d.name.as_str() == direct_key)
-                    {
+                    return match self.direct.as_mut().and_then(|direct| {
+                        direct.iter_mut().find(|d| d.name.as_str() == direct_key)
+                    }) {
                         Some(ref mut direct) if direct_field.len() > 1 => {
                             direct.update(&direct_field[1..], value)
                         }
@@ -231,14 +237,31 @@ impl PackageEntry for Direct {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SourceMember {
+    pub name:      String,
+    pub directory: PathBuf,
+    pub build_on:  Option<String>,
+    pub priority:  usize,
+}
+
+// Files that we want to cache and re-use between runs. These files will be symlinked.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SourceArtifact {
+    pub src: String,
+    pub dst: PathBuf,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
-    pub name: String,
-    pub version: String,
-    pub cvs: String,
-    pub url: String,
-    /// Post-obtain, pre-build commands
-    pub prebuild: Option<Vec<String>>,
+    pub name:      String,
+    pub version:   String,
+    pub cvs:       String,
+    pub url:       String,
+    pub members:   Option<Vec<SourceMember>>,
+    pub artifacts: Option<Vec<SourceArtifact>>,
+    pub prebuild:  Option<Vec<String>>,
+    pub build_on:  Option<String>,
 }
 
 impl PackageEntry for Source {
