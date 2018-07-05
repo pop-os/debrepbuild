@@ -1,14 +1,13 @@
-use std::{
-    fs::{self, File},
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
+use misc;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+use std::path::Path;
 
 type Branch = String;
 type Commit = String;
 
 pub fn git(project: &Path) -> io::Result<(Branch, Commit)> {
-    let branch = fs::read_to_string(&project.join(".git/HEAD"))?;
+    let branch = misc::read_to_string(&project.join(".git/HEAD"))?;
     let branch = branch
         .split_whitespace()
         .nth(1)
@@ -17,7 +16,7 @@ pub fn git(project: &Path) -> io::Result<(Branch, Commit)> {
         .nth(2)
         .unwrap_or("");
 
-    let commit = fs::read_to_string(&project.join(&[".git/refs/heads/", &branch].concat()))?;
+    let commit = misc::read_to_string(&project.join(&[".git/refs/heads/", &branch].concat()))?;
 
     Ok((branch.to_owned(), commit))
 }

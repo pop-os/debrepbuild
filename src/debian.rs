@@ -1,12 +1,11 @@
-use std::{
-    env,
-    fs::{self, File},
-    io::{self, Write},
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::env;
+use std::fs::{self, File};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use deflate::{write::GzEncoder, Compression};
+use deflate::write::GzEncoder;
+use deflate::Compression;
 use xz2::read::XzEncoder;
 
 use config::Config;

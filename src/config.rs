@@ -1,10 +1,9 @@
-use std::{
-    borrow::Cow,
-    fs::{self, File},
-    io::{self, Write},
-    path::PathBuf,
-};
+use std::borrow::Cow;
+use std::fs::File;
+use std::io::{self, Write};
+use std::path::PathBuf;
 use toml::{self, de};
+use misc;
 
 /// Currently hard-coded to search for `sources.toml` in the current working directory.
 const SOURCES: &str = "sources.toml";
@@ -246,6 +245,7 @@ pub struct SourceMember {
     pub name:      String,
     pub directory: PathBuf,
     pub build_on:  Option<String>,
+    #[serde(default)]
     pub priority:  usize,
 }
 
@@ -259,36 +259,22 @@ pub struct SourceArtifact {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
     pub name:      String,
-    pub version:   String,
-    pub cvs:       Option<String>,
+    #[serde(default = "default_cvs")]
+    pub cvs:       String,
     pub url:       Option<String>,
     pub path:      Option<String>,
     pub members:   Option<Vec<SourceMember>>,
     pub artifacts: Option<Vec<SourceArtifact>>,
     pub prebuild:  Option<Vec<String>>,
     pub build_on:  Option<String>,
+    #[serde(default)]
+    pub priority:  usize,
 }
 
-impl PackageEntry for Source {
-    fn get_version(&self) -> &str { &self.version }
-
-    fn get_url(&self) -> &str {
-        self.url.as_ref()
-            .or_else(|| self.path.as_ref())
-            .unwrap().as_str()
-    }
-
-    fn get_name(&self) -> &str { &self.name }
-
-    fn file_name(&self) -> String { "".into() }
-
-    fn destination(&self) -> PathBuf {
-        PathBuf::from(["pool/main/", &self.name[0..1], "/", &self.name, "/"].concat())
-    }
-}
+fn default_cvs() -> String { "git".into() }
 
 pub fn parse() -> Result<Config, ParsingError> {
-    let config: Config = fs::read(SOURCES)
+    let config: Config = misc::read(SOURCES)
         .map_err(|why| ParsingError::File { file: SOURCES, why })
         .and_then(|buffer| {
             toml::from_slice(&buffer).map_err(|why| ParsingError::Toml { file: SOURCES, why })

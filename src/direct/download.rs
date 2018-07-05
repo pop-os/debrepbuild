@@ -1,9 +1,8 @@
 use rayon::prelude::*;
-use reqwest::{self, header::ContentLength, Client, Response};
-use std::{
-    fs::{create_dir_all, File},
-    io,
-};
+use reqwest::{self, Client, Response};
+use reqwest::header::ContentLength;
+use std::fs::{create_dir_all, File};
+use std::io;
 
 use config::{Direct, PackageEntry};
 

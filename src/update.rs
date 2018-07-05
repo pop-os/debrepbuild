@@ -1,6 +1,7 @@
 use config::{Config, ParsingError};
 use reqwest::{self, Client, Url};
-use select::{document::Document, predicate::Name};
+use select::document::Document;
+use select::predicate::Name;
 
 impl From<ParsingError> for UpdateError {
     fn from(why: ParsingError) -> UpdateError { UpdateError::Write { why } }

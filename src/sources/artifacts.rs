@@ -1,10 +1,8 @@
 use super::SourceError;
-use std::{
-    borrow::Cow,
-    fs,
-    os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
-};
+use std::borrow::Cow;
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 pub struct LinkedArtifact(PathBuf);
 

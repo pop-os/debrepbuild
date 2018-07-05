@@ -17,13 +17,17 @@ mod cli;
 pub mod config;
 pub mod debian;
 mod direct;
+pub mod misc;
 mod sources;
 mod update;
 
 use cli::Action;
 use config::{Config, ConfigFetch};
 use direct::download::DownloadResult;
-use std::{fs, io, path::PathBuf, process::exit};
+use std::{fs, io};
+use std::path::{Path, PathBuf};
+use std::process::exit;
+
 use update::update_packages;
 
 fn main() {
@@ -118,6 +122,15 @@ fn update_repository(sources: &Config) {
     if package_failed {
         eprintln!("exiting due to error");
         exit(1);
+    }
+
+    let include_dir = Path::new("include");
+    if include_dir.is_dir() {
+        eprintln!("copying packages from {}", include_dir.display());
+        if let Err(why) = misc::cp_to_pool("include") {
+            eprintln!("failed to copy packages from include directory: {}", why);
+            exit(1);
+        }
     }
 
     if let Err(why) = generate_release_files(&sources) {

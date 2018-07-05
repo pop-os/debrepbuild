@@ -1,17 +1,14 @@
-use super::{
-    artifacts::{link_artifact, LinkedArtifact},
-    version::{changelog, git},
-    SourceError,
-};
-use config::{PackageEntry, Source, SourceMember};
+use super::super::misc;
+use super::artifacts::{link_artifact, LinkedArtifact};
+use super::version::{changelog, git};
+use super::SourceError;
+use config::{Source, SourceMember};
 use glob::glob;
-use std::{
-    env,
-    fs::{self, OpenOptions},
-    io::{self, Write},
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Attempts to build Debian packages from a given software repository.
 pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError> {
@@ -37,7 +34,7 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
     let _ = env::set_current_dir("build");
 
     if let Some(ref prebuild) = item.prebuild {
-        eprintln!("prebuilding {}", item.get_name());
+        eprintln!("prebuilding {}", item.name);
         for command in prebuild {
             let exit_status = Command::new("sh")
                 .args(&["-c", command])
@@ -50,7 +47,7 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
         }
     }
 
-    if let Some(members) = &item.members {
+    if let Some(ref members) = item.members {
         let mut sorted_members: Vec<SourceMember> = members.clone();
         sorted_members.sort_by(|a, b| a.priority.cmp(&b.priority));
 
@@ -73,7 +70,7 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
     };
 
     let _ = env::set_current_dir("..");
-    mv_to_pool().map_err(|why| SourceError::PackageMoving { why })
+    misc::mv_to_pool("build").map_err(|why| SourceError::PackageMoving { why })
 }
 
 fn pre_flight(
@@ -95,7 +92,7 @@ fn pre_flight(
             let version = changelog(dir).map_err(|why| SourceError::Changelog { why })?;
 
             if record_path.exists() {
-                let record = fs::read_to_string(&record_path)
+                let record = misc::read_to_string(&record_path)
                     .map_err(|why| SourceError::RecordRead { why })?;
                 let mut record = record.lines();
 
@@ -117,7 +114,7 @@ fn pre_flight(
             let mut append = false;
 
             if record_path.exists() {
-                let record = fs::read_to_string(&record_path)
+                let record = misc::read_to_string(&record_path)
                     .map_err(|why| SourceError::RecordRead { why })?;
                 let mut record = record.lines();
 
@@ -161,9 +158,9 @@ fn pre_flight(
 
     let result = match record {
         Some(Record::Changelog(version)) => {
-            fs::write(record_path, ["changelog\n", &version].concat().as_bytes())
+            misc::write(record_path, ["changelog\n", &version].concat().as_bytes())
         }
-        Some(Record::Commit(branch, commit)) => fs::write(
+        Some(Record::Commit(branch, commit)) => misc::write(
             record_path,
             ["commit\n", &branch, " ", &commit].concat().as_bytes(),
         ),
@@ -194,29 +191,4 @@ fn sbuild<P: AsRef<Path>>(branch: &str, path: P) -> Result<(), SourceError> {
         eprintln!("build failed!");
         Err(SourceError::BuildFailed)
     }
-}
-
-fn mv_to_pool() -> io::Result<()> {
-    for entry in fs::read_dir("build")? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            continue;
-        }
-
-        let filename = path.file_name().and_then(|x| x.to_str());
-        let filestem = path.file_stem().and_then(|x| x.to_str());
-        if let (Some(filename), Some(filestem)) = (filename, filestem) {
-            let package = &filename[..filename.find('_').unwrap_or(0)];
-            let arch = &filestem[filestem.rfind('_').unwrap_or(0) + 1..];
-            let destination = PathBuf::from(
-                ["pool/main/binary-", arch, "/", &package[0..1], "/", package].concat(),
-            );
-
-            fs::create_dir_all(&destination)?;
-            fs::rename(&path, &destination.join(filename))?;
-        }
-    }
-
-    Ok(())
 }
