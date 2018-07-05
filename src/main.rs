@@ -1,6 +1,7 @@
 extern crate deflate;
 extern crate failure;
 extern crate glob;
+extern crate md5;
 extern crate rayon;
 extern crate reqwest;
 extern crate select;

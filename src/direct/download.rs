@@ -1,8 +1,10 @@
+use md5;
 use rayon::prelude::*;
 use reqwest::{self, Client, Response};
 use reqwest::header::ContentLength;
 use std::fs::{create_dir_all, File};
-use std::io;
+use std::io::{self, BufRead, BufReader};
+use std::path::Path;
 
 use config::{Direct, PackageEntry};
 
@@ -13,6 +15,8 @@ pub enum DownloadError {
     Request { item: String, why:  reqwest::Error },
     #[fail(display = "unable to open '{}': {}", item, why)]
     File { item: String, why:  io::Error },
+    #[fail(display = "downloaded archive has an invalid checksum: expected {}, received {}", expected, received)]
+    InvalidChecksum { expected: String, received: String }
 }
 
 /// Possible messages that may be returned when a download has succeeded.
@@ -22,7 +26,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult, DownloadError> {
+fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadError> {
     eprintln!(" - {}", item.get_name());
 
     let parent = item.destination();
@@ -30,25 +34,39 @@ fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult
     let destination = parent.join(filename);
 
     let dest_result = if destination.exists() {
-        let mut capacity = File::open(&destination)
-            .and_then(|file| file.metadata().map(|x| x.len()))
-            .unwrap_or(0);
-
-        let response = client
-            .head(item.get_url())
-            .send()
-            .map_err(|why| DownloadError::Request {
+        if destination.is_file() {
+            let mut file = File::open(&destination).map_err(|why| DownloadError::File {
                 item: item.get_name().to_owned(),
                 why,
             })?;
 
-        if check_length(&response, capacity) {
-            return Ok(DownloadResult::AlreadyExists);
+            if let Some(ref checksum) = item.checksum {
+                let digest = md5_digest(file)
+                    .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
+
+                if &digest == checksum {
+                    return Ok(DownloadResult::AlreadyExists);
+                }
+            } else {
+                let capacity = file.metadata().map(|x| x.len()).unwrap_or(0);
+
+                let response = client
+                    .head(item.get_url())
+                    .send()
+                    .map_err(|why| DownloadError::Request {
+                        item: item.get_name().to_owned(),
+                        why,
+                    })?;
+
+                if check_length(&response, capacity) {
+                    return Ok(DownloadResult::AlreadyExists);
+                }
+            }
         }
 
-        File::create(destination)
+        File::create(&destination)
     } else {
-        create_dir_all(&parent).and_then(|_| File::create(destination))
+        create_dir_all(&parent).and_then(|_| File::create(&destination))
     };
 
     let mut dest = dest_result.map_err(|why| DownloadError::File {
@@ -64,12 +82,49 @@ fn download<P: PackageEntry>(client: &Client, item: &P) -> Result<DownloadResult
             why,
         })?;
 
-    response
+    let downloaded = response
         .copy_to(&mut dest)
-        .map(DownloadResult::Downloaded)
         .map_err(|why| DownloadError::Request {
             item: item.get_name().to_owned(),
             why,
+        })?;
+
+    validate(item, &destination).map(|_| DownloadResult::Downloaded(downloaded))
+}
+
+fn md5_digest(file: File) -> io::Result<String> {
+    let mut context = md5::Context::new();
+    let data = &mut BufReader::new(file);
+    loop {
+        let read = {
+            let buffer = data.fill_buf()?;
+            if buffer.len() == 0 { break }
+            context.consume(buffer);
+            buffer.len()
+        };
+
+        data.consume(read);
+    }
+
+    Ok(format!("{:x}", context.compute()))
+}
+
+fn validate(item: &Direct, dst: &Path) -> Result<(), DownloadError> {
+    File::open(dst)
+        .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why})
+        .and_then(|file| {
+            item.checksum.as_ref().map_or(Ok(()), |checksum| {
+                let digest = md5_digest(file)
+                    .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
+                if &digest == checksum {
+                    Ok(())
+                } else {
+                    Err(DownloadError::InvalidChecksum {
+                        expected: checksum.to_owned(),
+                        received: digest
+                    })
+                }
+            })
         })
 }
 

@@ -16,3 +16,4 @@ xz2 = "0.1.4"
 deflate = { version = "0.7.18", features = ["gzip"] }
 select = "0.4.2"
 glob = "0.2.11"
+md5 = "0.3.7"
