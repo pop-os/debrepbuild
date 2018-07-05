@@ -1,20 +1,20 @@
-use md5;
 use rayon::prelude::*;
 use reqwest::{self, Client, Response};
 use reqwest::header::ContentLength;
 use std::fs::{create_dir_all, File};
-use std::io::{self, BufRead, BufReader};
+use std::io;
 use std::path::Path;
 
 use config::{Direct, PackageEntry};
+use misc::md5_digest;
 
 /// Possible errors that may happen when attempting to download Debian packages and source code.
 #[derive(Debug, Fail)]
 pub enum DownloadError {
     #[fail(display = "unable to download '{}': {}", item, why)]
-    Request { item: String, why:  reqwest::Error },
+    Request { item: String, why: reqwest::Error },
     #[fail(display = "unable to open '{}': {}", item, why)]
-    File { item: String, why:  io::Error },
+    File { item: String, why: io::Error },
     #[fail(display = "downloaded archive has an invalid checksum: expected {}, received {}", expected, received)]
     InvalidChecksum { expected: String, received: String }
 }
@@ -90,23 +90,6 @@ fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadEr
         })?;
 
     validate(item, &destination).map(|_| DownloadResult::Downloaded(downloaded))
-}
-
-fn md5_digest(file: File) -> io::Result<String> {
-    let mut context = md5::Context::new();
-    let data = &mut BufReader::new(file);
-    loop {
-        let read = {
-            let buffer = data.fill_buf()?;
-            if buffer.len() == 0 { break }
-            context.consume(buffer);
-            buffer.len()
-        };
-
-        data.consume(read);
-    }
-
-    Ok(format!("{:x}", context.compute()))
 }
 
 fn validate(item: &Direct, dst: &Path) -> Result<(), DownloadError> {

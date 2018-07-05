@@ -246,6 +246,7 @@ pub struct SourceMember {
     pub name:      String,
     pub directory: PathBuf,
     pub build_on:  Option<String>,
+    pub debian:    Option<DebianPath>,
     #[serde(default)]
     pub priority:  usize,
 }
@@ -257,46 +258,43 @@ pub struct SourceArtifact {
     pub dst: PathBuf,
 }
 
+/// In the event that the source does not have a debian directory, we may designate the location of
+/// the debian files here.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum DebianPath {
+    Path { path: PathBuf },
+    URL { url: String },
+    Branch { branch: String }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum SourceLocation {
+    Path { path: PathBuf },
+    URL { url: String, checksum: String },
+    Git { url: String },
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
     pub name:      String,
-    #[serde(default = "default_cvs")]
-    pub cvs:       String,
-    pub url:       Option<String>,
-    pub path:      Option<String>,
+    pub location:  SourceLocation,
     pub members:   Option<Vec<SourceMember>>,
     pub artifacts: Option<Vec<SourceArtifact>>,
     pub prebuild:  Option<Vec<String>>,
     pub build_on:  Option<String>,
+    pub debian:    Option<DebianPath>,
     #[serde(default)]
     pub priority:  usize,
 }
 
-fn default_cvs() -> String { "git".into() }
-
 pub fn parse() -> Result<Config, ParsingError> {
-    let config: Config = misc::read(SOURCES)
+    misc::read(SOURCES)
         .map_err(|why| ParsingError::File { file: SOURCES, why })
         .and_then(|buffer| {
             toml::from_slice(&buffer).map_err(|why| ParsingError::Toml { file: SOURCES, why })
-        })?;
-
-    // Verify config
-    if let Some(ref sources) = config.source {
-        for source in sources {
-            if source.path.is_none() && source.url.is_none() {
-                return Err(ParsingError::SourceNotDefined {
-                    source: source.name.clone()
-                });
-            } else if source.path.is_some() && source.url.is_some() {
-                return Err(ParsingError::SourcePathAndUrlDefined {
-                    source: source.name.clone()
-                });
-            }
-        }
-    }
-
-    Ok(config)
+        })
 }
 
 #[cfg(test)]

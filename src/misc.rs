@@ -1,6 +1,47 @@
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use md5;
+
+pub fn md5_digest(file: File) -> io::Result<String> {
+    let mut context = md5::Context::new();
+    let data = &mut BufReader::new(file);
+    loop {
+        let read = {
+            let buffer = data.fill_buf()?;
+            if buffer.len() == 0 { break }
+            context.consume(buffer);
+            buffer.len()
+        };
+
+        data.consume(read);
+    }
+
+    Ok(format!("{:x}", context.compute()))
+}
+
+pub fn extract_tar(path: &Path, dst: &Path) -> io::Result<()> {
+    if dst.exists() {
+        fs::remove_dir_all(dst)?;
+    }
+
+    if fs::create_dir_all(dst)
+        .and_then(|_| Command::new("tar")
+            .arg("-xvf")
+            .arg(path)
+            .arg("-C")
+            .arg(dst)
+            .status()
+            .map(|x| x.success())
+        )?
+    {
+        Ok(())
+    } else {
+        Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
+    }
+
+}
 
 pub fn mv_to_pool<P: AsRef<Path>>(path: P) -> io::Result<()> {
     pool(path.as_ref(), |src, dst| fs::rename(src, dst))

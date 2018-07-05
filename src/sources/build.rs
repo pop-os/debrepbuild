@@ -20,7 +20,7 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
 
     if let Some(ref artifacts) = item.artifacts {
         for artifact in artifacts {
-            if let Ok(globs) = glob(&artifact.src) {
+            if let Ok(globs) = glob(&["assets/", &artifact.src].concat()) {
                 for file in globs.flat_map(|x| x.ok()) {
                     let src = file.canonicalize().unwrap();
                     let dst = path.join(&artifact.dst);

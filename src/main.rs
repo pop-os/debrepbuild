@@ -78,6 +78,8 @@ fn main() {
 
 /// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {
+    let _ = fs::create_dir_all("assets/artifacts");
+
     let mut package_failed = false;
     if let Some(ref ddl_sources) = sources.direct {
         for (id, result) in direct::download::parallel(ddl_sources)
