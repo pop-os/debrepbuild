@@ -1,36 +1,79 @@
-use super::super::misc;
+use super::super::SHARED_ASSETS;
 use super::artifacts::{link_artifact, LinkedArtifact};
 use super::version::{changelog, git};
 use super::SourceError;
-use config::{Source, SourceMember};
+use config::{DebianPath, Source};
 use glob::glob;
+use misc::{self, rsync};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn fetch_assets(
+    linked: &mut Vec<LinkedArtifact>,
+    src: &Path,
+    dst: &Path,
+) -> Result<(), SourceError> {
+    let directory = src.read_dir()
+        .map_err(|why| SourceError::File { file: src.to_path_buf(), why })?;
+
+    for entry in directory {
+        if let Ok(entry) = entry {
+            linked.push(link_artifact(&entry.path().canonicalize().unwrap(), dst)?);
+        }
+    }
+
+    Ok(())
+}
+
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError> {
-    eprintln!("building {}", path.display());
-    let pwd = env::current_dir().unwrap();
-    let cwd = pwd.join(path);
+pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError> {
+    eprintln!("attempting to build {}", &item.name);
+    let project_directory = pwd.join(&["build/", &item.name].concat());
+    let _ = fs::create_dir_all(&project_directory);
 
     let mut linked: Vec<LinkedArtifact> = Vec::new();
 
-    if let Some(ref artifacts) = item.artifacts {
-        for artifact in artifacts {
-            if let Ok(globs) = glob(&["assets/", &artifact.src].concat()) {
+    match pwd.join(&["assets/packages/", &item.name].concat()) {
+        ref local_assets if local_assets.exists() => {
+            fetch_assets(&mut linked, local_assets, &project_directory)?;
+        },
+        _ => ()
+    }
+
+    if let Some(ref assets) = item.assets {
+        for asset in assets {
+            eprintln!("asset: {:#?}", asset);
+            if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
                 for file in globs.flat_map(|x| x.ok()) {
-                    let src = file.canonicalize().unwrap();
-                    let dst = path.join(&artifact.dst);
-                    linked.push(link_artifact(&src, &dst)?);
+                    let dst = project_directory.join(&asset.dst);
+                    eprintln!("{:?} -> {:?}", file, dst);
+                    linked.push(link_artifact(&file, &dst)?);
                 }
             }
         }
     }
 
-    let _ = fs::create_dir_all("build/record");
+    match item.debian {
+        Some(DebianPath::URL { ref url, ref checksum }) => {
+            unimplemented!()
+        }
+        Some(DebianPath::Branch { ref branch }) => {
+            unimplemented!()
+        }
+        None => {
+            match pwd.join(&["debian/", &item.name, "/"].concat()) {
+                ref debian_path if debian_path.exists() => {
+                    rsync(debian_path, &project_directory.join("debian"))
+                        .map_err(|why| SourceError::Rsync { why })?;
+                }
+                _ => ()
+            }
+        }
+    }
+
     let _ = env::set_current_dir("build");
 
     if let Some(ref prebuild) = item.prebuild {
@@ -47,30 +90,15 @@ pub fn build(item: &Source, path: &Path, branch: &str) -> Result<(), SourceError
         }
     }
 
-    if let Some(ref members) = item.members {
-        let mut sorted_members: Vec<SourceMember> = members.clone();
-        sorted_members.sort_by(|a, b| a.priority.cmp(&b.priority));
-
-        for member in sorted_members {
-            let cwd = cwd.join(&member.directory);
-            pre_flight(
-                branch,
-                &member.name,
-                &cwd,
-                member.build_on.as_ref().map(|x| x.as_str()),
-            )?;
-        }
-    } else {
-        pre_flight(
-            branch,
-            &item.name,
-            &cwd,
-            item.build_on.as_ref().map(|x| x.as_str()),
-        )?;
-    };
+    pre_flight(
+        branch,
+        &item.name,
+        &project_directory,
+        item.build_on.as_ref().map(|x| x.as_str()),
+    )?;
 
     let _ = env::set_current_dir("..");
-    misc::mv_to_pool("build").map_err(|why| SourceError::PackageMoving { why })
+    misc::mv_to_pool("build", branch).map_err(|why| SourceError::PackageMoving { why })
 }
 
 fn pre_flight(
@@ -79,7 +107,7 @@ fn pre_flight(
     dir: &Path,
     build_on: Option<&str>,
 ) -> Result<(), SourceError> {
-    let record_path = PathBuf::from(["record/", &name].concat());
+    let record_path = PathBuf::from(["../record/", &name].concat());
 
     enum Record {
         Changelog(String),

@@ -1,6 +1,7 @@
 extern crate deflate;
 extern crate failure;
 extern crate glob;
+extern crate libc;
 extern crate md5;
 extern crate rayon;
 extern crate reqwest;
@@ -9,6 +10,8 @@ extern crate serde;
 extern crate toml;
 extern crate xz2;
 
+#[macro_use]
+extern crate clap;
 #[macro_use]
 extern crate failure_derive;
 #[macro_use]
@@ -22,18 +25,40 @@ pub mod misc;
 mod sources;
 mod update;
 
+use clap::{Arg, App, SubCommand};
 use cli::Action;
 use config::{Config, ConfigFetch};
 use direct::download::DownloadResult;
-use std::{fs, io};
+use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use update::update_packages;
+use sources::build::build;
 
 fn main() {
+    let mut app = App::new("Debian Repository Builder")
+        .about("Creates and maintains debian repositories")
+        .author(crate_authors!())
+        .version(crate_version!())
+        .subcommand(
+            SubCommand::with_name("build")
+                .about("Builds a new repo, or updates an existing one")
+                .arg(Arg::with_name("package").required(false))
+        ).subcommand(
+            SubCommand::with_name("config")
+                .about("Gets or sets fields within the repo config")
+                .arg(Arg::with_name("key").required(false))
+                .arg(Arg::with_name("value").required(false))
+        ).subcommand(
+            SubCommand::with_name("update")
+                .about("Updates direct download-based packages in the configuration")
+        );
+
+    let matches = app.clone().get_matches();
+
     match config::parse() {
-        Ok(mut sources) => match cli::requested_action() {
+        Ok(mut sources) => match cli::requested_action(&matches) {
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
                 Some(value) => println!("{}: {}", key, value),
@@ -43,7 +68,7 @@ fn main() {
                 }
             },
             Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
-            Action::Update(key, value) => match sources.update(&key, value) {
+            Action::Update(key, value) => match sources.update(key, value.to_owned()) {
                 Ok(()) => match sources.write_to_disk() {
                     Ok(()) => eprintln!("successfully wrote config changes to disk"),
                     Err(why) => {
@@ -61,7 +86,7 @@ fn main() {
                 exit(1);
             },
             Action::ConfigHelp => {
-                println!("config key[.field] [value]");
+                let _ = app.print_help();
                 exit(1);
             }
             Action::Unsupported => {
@@ -70,19 +95,30 @@ fn main() {
             }
         },
         Err(why) => {
-            eprintln!("debrepbuild: {}", why);
+            eprintln!("debrep: {}", why);
             exit(1);
         }
     }
 }
 
+pub const SHARED_ASSETS: &str = "assets/share/";
+pub const PACKAGE_ASSETS: &str = "assets/packages/";
+
 /// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {
-    let _ = fs::create_dir_all("assets/artifacts");
+    let dirs_result = [SHARED_ASSETS, PACKAGE_ASSETS, "build", "record", "sources"].iter()
+        .map(|dir| if Path::new(dir).exists() { Ok(()) } else { fs::create_dir_all(dir) })
+        .collect::<io::Result<()>>();
 
+    if let Err(why) = dirs_result {
+        eprintln!("unable to create directories in current directory: {}", why);
+        exit(1);
+    }
+
+    let branch = &sources.archive;
     let mut package_failed = false;
     if let Some(ref ddl_sources) = sources.direct {
-        for (id, result) in direct::download::parallel(ddl_sources)
+        for (id, result) in direct::download::parallel(ddl_sources, branch)
             .into_iter()
             .enumerate()
         {
@@ -102,22 +138,29 @@ fn update_repository(sources: &Config) {
         }
     }
 
-    let branch = &sources.archive;
+    let pwd = env::current_dir().unwrap();
     if let Some(ref sources) = sources.source {
-        let _ = fs::create_dir("sources");
-        for (id, result) in sources::download::parallel(sources, branch)
+        for (id, result) in sources::download::parallel(sources)
             .into_iter()
             .enumerate()
         {
             let name = &sources[id].name;
             match result {
                 Ok(()) => {
-                    eprintln!("package '{}' was successfully fetched & compiled", name);
+                    eprintln!("package '{}' was successfully fetched", name);
                 }
                 Err(why) => {
-                    eprintln!("package '{}' failed to build: {}", name, why);
+                    eprintln!("package '{}' failed to download: {}", name, why);
                     package_failed = true;
                 }
+            }
+        }
+
+        for source in sources {
+            if let Err(why) = build(source, &pwd, branch) {
+                eprintln!("package '{}' failed to build: {}", source.name, why);
+                package_failed = true;
+                break
             }
         }
     }
@@ -130,7 +173,7 @@ fn update_repository(sources: &Config) {
     let include_dir = Path::new("include");
     if include_dir.is_dir() {
         eprintln!("copying packages from {}", include_dir.display());
-        if let Err(why) = misc::cp_to_pool("include") {
+        if let Err(why) = misc::cp_to_pool("include", branch) {
             eprintln!("failed to copy packages from include directory: {}", why);
             exit(1);
         }
@@ -146,8 +189,10 @@ fn update_repository(sources: &Config) {
 pub enum ReleaseError {
     #[fail(display = "failed to generate release files for binaries: {}", why)]
     Binary { why: io::Error },
+    #[fail(display = "failed to generate source index: {}", why)]
+    Source { why: io::Error },
     #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
-    Dists { archive: String, why:     io::Error },
+    Dists { archive: String, why: io::Error },
     #[fail(display = "failed to generate InRelease file: {}", why)]
     InRelease { why: io::Error },
     #[fail(display = "failed to generate Release.gpg file: {}", why)]
@@ -156,13 +201,18 @@ pub enum ReleaseError {
 
 /// Generate the dist release files from the existing binary and source files.
 fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
-    let release = PathBuf::from(["dists/", &sources.archive, "/Release"].concat());
-    let in_release = PathBuf::from(["dists/", &sources.archive, "/InRelease"].concat());
-    let release_gpg = PathBuf::from(["dists/", &sources.archive, "/Release.gpg"].concat());
+    env::set_current_dir("repo").expect("unable to switch dir to repo");
+    let base = ["dists/", &sources.archive].concat();
+    let pool = ["pool/", &sources.archive, "/main"].concat();
+    let _ = fs::create_dir_all(&base);
 
-    debian::generate_binary_files(&sources).map_err(|why| ReleaseError::Binary { why })?;
+    let release = PathBuf::from([&base, "/Release"].concat());
+    let in_release = PathBuf::from([&base, "/InRelease"].concat());
+    let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
-    debian::generate_dists_release(&sources).map_err(|why| ReleaseError::Dists {
+    debian::generate_binary_files(sources, &base, &pool).map_err(|why| ReleaseError::Binary { why })?;
+    debian::generate_sources_index(&base, &pool).map_err(|why| ReleaseError::Source { why })?;
+    debian::generate_dists_release(sources, &base).map_err(|why| ReleaseError::Dists {
         archive: sources.archive.clone(),
         why,
     })?;
