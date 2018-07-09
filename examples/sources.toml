@@ -6,9 +6,9 @@ email = "michael@system76.com"
 
 [[direct]]
 name = "atom-editor"
-version = "1.26.1"
+version = "1.28.1"
 arch = "amd64"
-url = "https://github.com/atom/atom/releases/download/v1.26.1/atom-amd64.deb"
+url = "https://github.com/atom/atom/releases/download/v1.28.1/atom-amd64.deb"
 
 [direct.update]
 source = "github"
@@ -18,9 +18,9 @@ before = "/atom"
 
 [[direct]]
 name = "mattermost-desktop"
-version = "4.0.1"
+version = "4.1.2"
 arch = "amd64"
-url = "https://releases.mattermost.com/desktop/4.0.1/mattermost-desktop-4.0.1-linux-amd64.deb"
+url = "https://releases.mattermost.com/desktop/4.1.2/mattermost-desktop-4.1.2-linux-amd64.deb"
 
 [direct.update]
 source = "github"
@@ -36,9 +36,9 @@ url = "https://downloads.slack-edge.com/linux_releases/slack-desktop-3.1.1-amd64
 
 [[direct]]
 name = "spotify-client"
-version = "1.0.79.223.g92622cc2-21"
+version = "1.0.80.480.g51b03ac3-13"
 arch = "amd64"
-url = "http://repository.spotify.com/pool/non-free/s/spotify-client/spotify-client_1.0.79.223.g92622cc2-21_amd64.deb"
+url = "http://repository.spotify.com/pool/non-free/s/spotify-client/spotify-client_1.0.80.480.g51b03ac3-13_amd64.deb"
 
 [direct.update]
 source = "directory"
@@ -66,9 +66,9 @@ before = "~ubuntu"
 
 [[direct]]
 name = "signal-desktop"
-version = "1.8.0"
+version = "0.46.4"
 arch = "amd64"
-url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_1.8.0_amd64.deb"
+url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_0.46.4_amd64.deb"
 
 [direct.update]
 source = "github"
@@ -103,9 +103,9 @@ url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-devices
 
 [[direct]]
 name = "android-studio"
-version = "173.4720617"
+version = "173.4819257"
 arch = "amd64"
-url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4720617~bionic_amd64.deb"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4819257~bionic_amd64.deb"
 
 [direct.update]
 source = "directory"
@@ -116,9 +116,9 @@ contains = "bionic"
 
 [[direct]]
 name = "android-studio-preview"
-version = "181.4720098"
+version = "181.4869471"
 arch = "amd64"
-url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/android-studio-preview_181.4720098~bionic_amd64.deb"
+url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio-preview/android-studio-preview_181.4869471~bionic_amd64.deb"
 
 [direct.update]
 source = "directory"
