@@ -55,10 +55,16 @@ pub fn md5_digest(file: File) -> io::Result<String> {
 }
 
 pub fn extract(src: &Path, dst: &Path) -> io::Result<()> {
-    match src.extension().and_then(|x| x.to_str()) {
-        Some("zip") => unzip(src, dst),
-        Some(ext) if ext.starts_with("tar") => untar(src, dst),
-        Some(ext) => unimplemented!(),
+    match src.file_name().and_then(|x| x.to_str()) {
+        Some(filename) => {
+            if filename.ends_with(".zip") {
+                unzip(src, dst)
+            } else if filename.ends_with(".tar.gz") || filename.ends_with(".tar.xz") {
+                untar(src, dst)
+            } else {
+                unimplemented!()
+            }
+        }
         None => unimplemented!()
     }
 }
