@@ -3,6 +3,7 @@ use clap::ArgMatches;
 /// Possible actions that the user may request when running the application.
 #[derive(Debug, PartialEq)]
 pub enum Action<'a> {
+    Build(&'a str),
     ConfigHelp,
     Fetch(&'a str),
     FetchConfig,
@@ -17,7 +18,7 @@ pub enum Action<'a> {
 pub fn requested_action<'a>(matches: &'a ArgMatches) -> Action<'a> {
     if let Some(build) = matches.subcommand_matches("build") {
         build.value_of("package")
-            .map_or(Action::UpdateRepository, |_pkg| Action::Unsupported)
+            .map_or(Action::UpdateRepository, |pkg| Action::Build(pkg))
     } else if let Some(config) = matches.subcommand_matches("config") {
         config.value_of("key").map_or(Action::FetchConfig, |key| {
             config.value_of("value").map_or(Action::Fetch(key), |value| {

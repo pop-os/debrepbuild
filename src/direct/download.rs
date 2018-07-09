@@ -26,7 +26,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-fn download(client: &Client, item: &Direct, branch: &str) -> Result<DownloadResult, DownloadError> {
+pub fn download(client: &Client, item: &Direct, branch: &str) -> Result<DownloadResult, DownloadError> {
     eprintln!(" - {}", item.get_name());
 
     let parent = item.destination(branch);

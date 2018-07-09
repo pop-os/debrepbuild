@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use update::update_packages;
+use reqwest::Client;
 use sources::build::build;
 
 fn main() {
@@ -59,6 +60,7 @@ fn main() {
 
     match config::parse() {
         Ok(mut sources) => match cli::requested_action(&matches) {
+            Action::Build(package) => update_package(&sources, package),
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
                 Some(value) => println!("{}: {}", key, value),
@@ -103,6 +105,44 @@ fn main() {
 
 pub const SHARED_ASSETS: &str = "assets/share/";
 pub const PACKAGE_ASSETS: &str = "assets/packages/";
+
+fn update_package(sources: &Config, package: &str) {
+    if let Some(ref source) = sources.direct.as_ref().and_then(|ddl| ddl.iter().find(|x| x.name == package)) {
+        if let Err(why) = direct::download::download(&Client::new(), source, &sources.archive) {
+            eprintln!("debrep: failed to download {}: {}", package, why);
+            exit(1);
+        }
+        return;
+    }
+
+    if let Some(ref source) = sources.source.as_ref().and_then(|s| s.iter().find(|x| x.name == package)) {
+        if let Err(why) = sources::download::download(source) {
+            eprintln!("debrep: failed to download source {}: {}", package, why);
+            exit(1);
+        }
+
+        let pwd = env::current_dir().unwrap();
+
+        if let Err(why) = build(source, &pwd, &sources.archive) {
+            eprintln!("debrep: package '{}' failed to build: {}", source.name, why);
+            exit(1);
+        }
+    }
+
+    let include_dir = Path::new("include");
+    if include_dir.is_dir() {
+        eprintln!("copying packages from {}", include_dir.display());
+        if let Err(why) = misc::cp_to_pool("include", &sources.archive) {
+            eprintln!("failed to copy packages from include directory: {}", why);
+            exit(1);
+        }
+    }
+
+    if let Err(why) = generate_release_files(&sources) {
+        eprintln!("{}", why);
+        exit(1);
+    }
+}
 
 /// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {

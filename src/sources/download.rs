@@ -12,22 +12,26 @@ pub fn parallel(items: &[Source]) -> Vec<Result<(), SourceError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()
-        .map(|item| match item.location {
-            Some(SourceLocation::Git { ref url, ref branch }) => {
-                match *branch {
-                    Some(ref _branch) => unimplemented!(),
-                    None => download_git(url)
-                }
-            },
-            Some(SourceLocation::URL { ref url, ref checksum }) => {
-                download(item, url, checksum)
-            },
-            None => Ok(())
-        })
+        .map(download)
         .collect()
 }
 
-fn download(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError> {
+pub fn download(item: &Source) -> Result<(), SourceError> {
+    match item.location {
+        Some(SourceLocation::Git { ref url, ref branch }) => {
+            match *branch {
+                Some(ref _branch) => unimplemented!(),
+                None => download_git(url)
+            }
+        },
+        Some(SourceLocation::URL { ref url, ref checksum }) => {
+            download_(item, url, checksum)
+        },
+        None => Ok(())
+    }
+}
+
+fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError> {
     let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
     let destination = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
 
