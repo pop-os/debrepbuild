@@ -10,18 +10,24 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use walkdir::WalkDir;
 
 fn fetch_assets(
     linked: &mut Vec<LinkedArtifact>,
     src: &Path,
     dst: &Path,
 ) -> Result<(), SourceError> {
-    let directory = src.read_dir()
-        .map_err(|why| SourceError::File { file: src.to_path_buf(), why })?;
+    for entry in WalkDir::new(src).into_iter().flat_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            let relative = path.strip_prefix(src).unwrap();
+            // let relative = relative.strip_prefix("/").unwrap();
+            let new_path = dst.join(relative);
 
-    for entry in directory {
-        if let Ok(entry) = entry {
-            linked.push(link_artifact(&entry.path().canonicalize().unwrap(), dst)?);
+            eprintln!("creating directory at {:?}", new_path);
+            fs::create_dir(new_path);
+        } else {
+            linked.push(link_artifact(&path.canonicalize().unwrap(), dst)?);
         }
     }
 
