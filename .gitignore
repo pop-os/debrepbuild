@@ -1,5 +1,4 @@
 /target
 **/*.rs.bk
-/examples/pool
-/examples/dists
+/examples/repo
 /examples/sources

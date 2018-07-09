@@ -1,38 +1,32 @@
-use std::env;
+use clap::ArgMatches;
 
 /// Possible actions that the user may request when running the application.
 #[derive(Debug, PartialEq)]
-pub enum Action {
+pub enum Action<'a> {
     ConfigHelp,
-    Fetch(String),
+    Fetch(&'a str),
     FetchConfig,
     Unsupported,
     UpdatePackages,
-    Update(String, String),
+    Update(&'a str, &'a str),
     UpdateRepository,
 }
 
 /// Checks the values that have been passed into the program, and returns the action
 /// that the user requested.
-pub fn requested_action() -> Action { get_action(env::args().skip(1)) }
-
-/// Source code responsible for fetching an action from a given iterator.
-/// Exists seperately from `requested_action` for testing purposes.
-fn get_action<I: Iterator<Item = String>>(mut args: I) -> Action {
-    match args.next().as_ref().map(|x| x.as_str()) {
-        None => Action::UpdateRepository,
-        Some("config") => match (
-            args.next(),
-            args.next().as_ref().map(|x| x.as_str()),
-            args.next(),
-        ) {
-            (Some(key), Some("="), Some(value)) => Action::Update(key, value),
-            (Some(key), None, None) => Action::Fetch(key),
-            (None, None, None) => Action::FetchConfig,
-            _ => Action::ConfigHelp,
-        },
-        Some("update") => Action::UpdatePackages,
-        Some(_) => Action::Unsupported,
+pub fn requested_action<'a>(matches: &'a ArgMatches) -> Action<'a> {
+    if let Some(build) = matches.subcommand_matches("build") {
+        build.value_of("package")
+            .map_or(Action::UpdateRepository, |_pkg| Action::Unsupported)
+    } else if let Some(config) = matches.subcommand_matches("config") {
+        config.value_of("key").map_or(Action::FetchConfig, |key| {
+            config.value_of("value").map_or(Action::Fetch(key), |value| {
+                Action::Update(key, value)
+            })
+        })
+    } else {
+        matches.subcommand_matches("update")
+            .map_or(Action::ConfigHelp, |_| Action::UpdatePackages)
     }
 }
 

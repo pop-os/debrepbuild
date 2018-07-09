@@ -1,31 +1,35 @@
-use super::build::build;
 use super::SourceError;
 use config::{Source, SourceLocation};
-use misc::{extract_tar, md5_digest};
+use misc::{extract, md5_digest};
 use rayon::prelude::*;
 use reqwest;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Downloads source code repositories and builds them in parallel.
-pub fn parallel(items: &[Source], branch: &str) -> Vec<Result<(), SourceError>> {
+/// Downloads source code repositories in parallel.
+pub fn parallel(items: &[Source]) -> Vec<Result<(), SourceError>> {
     eprintln!("downloading sources in parallel");
     items
         .par_iter()
         .map(|item| match item.location {
-            SourceLocation::Path { ref path } => build(item, path, branch),
-            SourceLocation::Git { ref url } => download_git(item, url, branch),
-            SourceLocation::URL { ref url, ref checksum } => {
-                download(item, url, checksum, branch)
+            Some(SourceLocation::Git { ref url, ref branch }) => {
+                match *branch {
+                    Some(ref _branch) => unimplemented!(),
+                    None => download_git(url)
+                }
             },
+            Some(SourceLocation::URL { ref url, ref checksum }) => {
+                download(item, url, checksum)
+            },
+            None => Ok(())
         })
         .collect()
 }
 
-fn download(item: &Source, url: &str, checksum: &str, branch: &str) -> Result<(), SourceError> {
+fn download(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError> {
     let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
-    let destination = PathBuf::from(["assets/artifacts/", &item.name, "_", &filename].concat());
+    let destination = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
 
     let requires_download = if destination.is_file() {
         let digest = File::open(&destination)
@@ -60,10 +64,22 @@ fn download(item: &Source, url: &str, checksum: &str, branch: &str) -> Result<()
         })?;
 
     if &digest == checksum {
-        let path = PathBuf::from(["sources/", &item.name].concat());
-        extract_tar(&destination, &path)
+        // match item.build_on.as_ref().map(|x| x.as_str()) {
+        //     Some("changelog") => match item.debian {
+        //         Some(DebianPath::URL { ref url, ref checksum }) => unimplemented!(),
+        //         Some(DebianPath::Branch { ref branch }) => unimplemented!(),
+        //         None => {
+        //             let changelog_path = PathBuf::from(["debian/", &item.name, "/changelog"].concat()));
+        //             if let Ok(changelog) => version::changelog(&changelog_path) {
+        //
+        //             }
+        //         }
+        //     }
+        //     _ => ()
+        // }
+        let path = PathBuf::from(["build/", &item.name].concat());
+        extract(&destination, &path)
             .map_err(|why| SourceError::TarExtract { path: destination, why })
-            .and_then(|_| build(item, &path, branch))
     } else {
         Err(SourceError::InvalidChecksum {
             expected: checksum.to_owned(),
@@ -73,14 +89,14 @@ fn download(item: &Source, url: &str, checksum: &str, branch: &str) -> Result<()
 }
 
 /// Downloads the source repository via git, then attempts to build it.
-fn download_git(item: &Source, url: &str, branch: &str) -> Result<(), SourceError> {
+fn download_git(url: &str) -> Result<(), SourceError> {
     let name: String = {
         url.split_at(url.rfind('/').unwrap() + 1)
             .1
             .replace(".git", "")
     };
 
-    let path = PathBuf::from(["sources/", &name].concat());
+    let path = PathBuf::from(["build/", &name].concat());
 
     if path.exists() {
         eprintln!("pulling {}", name);
@@ -100,7 +116,7 @@ fn download_git(item: &Source, url: &str, branch: &str) -> Result<(), SourceErro
     } else {
         eprintln!("cloning {}", name);
         let exit_status = Command::new("git")
-            .args(&["-C", "sources", "clone", &url])
+            .args(&["-C", "build", "clone", &url])
             .status()
             .map_err(|why| SourceError::GitRequest {
                 item: name.to_owned(),
@@ -112,5 +128,5 @@ fn download_git(item: &Source, url: &str, branch: &str) -> Result<(), SourceErro
         }
     }
 
-    build(item, &path, branch)
+    Ok(())
 }

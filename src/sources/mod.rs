@@ -40,5 +40,7 @@ pub enum SourceError {
     #[fail(display = "downloaded archive has an invalid checksum: expected {}, received {}", expected, received)]
     InvalidChecksum { expected: String, received: String },
     #[fail(display = "failed to extract tar at '{:?}': {}", path, why)]
-    TarExtract { path: PathBuf, why: io::Error }
+    TarExtract { path: PathBuf, why: io::Error },
+    #[fail(display = "rsync failed: {}", why)]
+    Rsync { why: io::Error }
 }

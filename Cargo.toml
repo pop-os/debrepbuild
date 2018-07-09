@@ -1,7 +1,11 @@
 [package]
-name = "debrepbuild"
+name = "debrepobuilder"
 version = "0.1.0"
 authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
+
+[[bin]]
+name = "debrep"
+path = "src/main.rs"
 
 [dependencies]
 serde = "1.0.43"
@@ -17,3 +21,5 @@ deflate = { version = "0.7.18", features = ["gzip"] }
 select = "0.4.2"
 glob = "0.2.11"
 md5 = "0.3.7"
+libc = "0.2"
+clap = "2.32.0"

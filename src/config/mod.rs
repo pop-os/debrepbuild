@@ -5,6 +5,10 @@ use std::path::PathBuf;
 use toml::{self, de};
 use misc;
 
+mod source;
+
+pub use self::source::*;
+
 /// Currently hard-coded to search for `sources.toml` in the current working directory.
 const SOURCES: &str = "sources.toml";
 
@@ -154,9 +158,8 @@ impl ConfigFetch for Config {
     }
 }
 
-/// Methods shared between `Direct` and `Source` structures.
 pub trait PackageEntry {
-    fn destination(&self) -> PathBuf;
+    fn destination(&self, &str) -> PathBuf;
     fn file_name(&self) -> String;
     fn get_name(&self) -> &str;
     fn get_url(&self) -> &str;
@@ -226,10 +229,12 @@ impl PackageEntry for Direct {
         ].concat()
     }
 
-    fn destination(&self) -> PathBuf {
+    fn destination(&self, branch: &str) -> PathBuf {
         PathBuf::from(
             [
-                "pool/main/binary-",
+                "repo/pool/",
+                branch,
+                "/main/binary-",
                 &self.arch,
                 "/",
                 &self.name[0..1],
@@ -241,53 +246,6 @@ impl PackageEntry for Direct {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SourceMember {
-    pub name:      String,
-    pub directory: PathBuf,
-    pub build_on:  Option<String>,
-    pub debian:    Option<DebianPath>,
-    #[serde(default)]
-    pub priority:  usize,
-}
-
-// Files that we want to cache and re-use between runs. These files will be symlinked.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SourceArtifact {
-    pub src: String,
-    pub dst: PathBuf,
-}
-
-/// In the event that the source does not have a debian directory, we may designate the location of
-/// the debian files here.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum DebianPath {
-    Path { path: PathBuf },
-    URL { url: String },
-    Branch { branch: String }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum SourceLocation {
-    Path { path: PathBuf },
-    URL { url: String, checksum: String },
-    Git { url: String },
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Source {
-    pub name:      String,
-    pub location:  SourceLocation,
-    pub members:   Option<Vec<SourceMember>>,
-    pub artifacts: Option<Vec<SourceArtifact>>,
-    pub prebuild:  Option<Vec<String>>,
-    pub build_on:  Option<String>,
-    pub debian:    Option<DebianPath>,
-    #[serde(default)]
-    pub priority:  usize,
-}
 
 pub fn parse() -> Result<Config, ParsingError> {
     misc::read(SOURCES)

@@ -26,10 +26,10 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-fn download(client: &Client, item: &Direct) -> Result<DownloadResult, DownloadError> {
+fn download(client: &Client, item: &Direct, branch: &str) -> Result<DownloadResult, DownloadError> {
     eprintln!(" - {}", item.get_name());
 
-    let parent = item.destination();
+    let parent = item.destination(branch);
     let filename = item.file_name();
     let destination = parent.join(filename);
 
@@ -121,11 +121,11 @@ fn check_length(response: &Response, compared: u64) -> bool {
 }
 
 /// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct]) -> Vec<Result<DownloadResult, DownloadError>> {
+pub fn parallel(items: &[Direct], branch: &str) -> Vec<Result<DownloadResult, DownloadError>> {
     eprintln!("downloading packages in parallel");
     let client = Client::new();
     items
         .par_iter()
-        .map(|item| download(&client, item))
+        .map(|item| download(&client, item, branch))
         .collect()
 }

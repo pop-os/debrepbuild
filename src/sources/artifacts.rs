@@ -3,11 +3,14 @@ use std::borrow::Cow;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use misc::unlink;
 
 pub struct LinkedArtifact(PathBuf);
 
 impl Drop for LinkedArtifact {
-    fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+    fn drop(&mut self) {
+        let _ = unlink(&self.0);
+    }
 }
 
 pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceError> {
@@ -27,7 +30,7 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
                 return Ok(LinkedArtifact(dst.to_owned().to_path_buf()));
             } else {
                 eprintln!("removing {}", dst.display());
-                fs::remove_file(&dst).map_err(|why| SourceError::LinkRemoval { why })?;
+                unlink(&dst).map_err(|why| SourceError::LinkRemoval { why })?;
             }
         }
     }
@@ -38,8 +41,21 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
         .map_err(|why| SourceError::Link { why })
 }
 
-fn resolve_destination<'a>(src: &Path, dst: &'a Path) -> Cow<'a, Path> {
-    if dst.is_dir() && src.is_file() {
+fn resolve_destination<'a>(mut src: &'a Path, dst: &'a Path) -> Cow<'a, Path> {
+    let src_is_file = src.is_file();
+    for component in dst.components().map(|comp| comp.as_os_str()) {
+        if let Ok(path) = src.strip_prefix("/") {
+            src = path;
+        }
+
+        if let Ok(path) = src.strip_prefix(component) {
+            src = path;
+        } else {
+            break
+        }
+    }
+
+    if dst.is_dir() && src_is_file {
         Cow::Owned(dst.join(src.file_name().unwrap()))
     } else if dst.is_dir() && src.is_dir() {
         Cow::Owned(dst.join(src.parent().unwrap()))

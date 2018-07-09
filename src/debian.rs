@@ -12,34 +12,24 @@ use config::Config;
 
 /// Generates the binary files from Debian packages that exist within the pool, using
 /// `apt-ftparchive`
-pub(crate) fn generate_binary_files(config: &Config) -> io::Result<()> {
+pub(crate) fn generate_binary_files(config: &Config, dist_base: &str, pool_base: &str) -> io::Result<()> {
     eprintln!("generating binary files");
-    let branch = PathBuf::from(["dists/", &config.archive, "/main/"].concat());
-    fs::create_dir_all(&branch)?;
+    let branch = PathBuf::from([dist_base, "/main/"].concat());
 
-    for directory in fs::read_dir("pool/main")? {
+    for directory in fs::read_dir(pool_base)? {
         let entry = directory?;
         let arch = entry.file_name();
+        if &arch == "source" { continue }
         let path = branch.join(&arch);
         fs::create_dir_all(&path)?;
 
         let package = Command::new("apt-ftparchive")
             .arg("packages")
-            .arg(PathBuf::from("pool/main").join(&arch))
+            .arg(PathBuf::from(pool_base).join(&arch))
             .output()
             .map(|data| data.stdout)?;
 
-        let mut uncompressed_packages = File::create(path.join("Packages"))?;
-        uncompressed_packages.write_all(&package)?;
-
-        let mut gz_file = File::create(path.join("Packages.gz"))?;
-        let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
-        compressor.write_all(&package)?;
-        let _ = compressor.finish()?;
-
-        let mut xz_file = File::create(path.join("Packages.xz"))?;
-        let mut compressor = XzEncoder::new(package.as_slice(), 9);
-        io::copy(&mut compressor, &mut xz_file)?;
+        compress("Packages", &path, &package)?;
 
         let mut release = File::create(path.join("Release"))?;
         writeln!(&mut release, "Archive: {}", config.archive)?;
@@ -62,13 +52,40 @@ pub(crate) fn generate_binary_files(config: &Config) -> io::Result<()> {
     Ok(())
 }
 
+pub(crate) fn generate_sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> {
+    eprintln!("generationg sources index");
+    let path = PathBuf::from([dist_base, "/main/source/"].concat());
+    fs::create_dir_all(&path)?;
+
+    let data = Command::new("apt-ftparchive")
+        .arg("packages")
+        .arg(PathBuf::from(pool_base).join("source"))
+        .output()
+        .map(|data| data.stdout)?;
+
+    compress("Sources", &path, &data)
+}
+
+fn compress(name: &str, path: &Path, data: &[u8]) -> io::Result<()> {
+    let mut uncompressed_data = File::create(path.join(name))?;
+    uncompressed_data.write_all(data)?;
+
+    let mut gz_file = File::create(path.join([name, ".gz"].concat()))?;
+    let mut compressor = GzEncoder::new(&mut gz_file, Compression::Best);
+    compressor.write_all(data)?;
+    let _ = compressor.finish()?;
+
+    let mut xz_file = File::create(path.join([name, ".xz"].concat()))?;
+    let mut compressor = XzEncoder::new(data, 9);
+    io::copy(&mut compressor, &mut xz_file).map(|_| ())
+}
+
 /// Generates the dists release file via `apt-ftparchive`.
-pub(crate) fn generate_dists_release(config: &Config) -> io::Result<()> {
+pub(crate) fn generate_dists_release(config: &Config, base: &str) -> io::Result<()> {
     eprintln!("generating dists release files");
 
-    let dist_dir = &["dists/", &config.archive].concat();
     let cwd = env::current_dir()?;
-    env::set_current_dir(dist_dir)?;
+    env::set_current_dir(base)?;
 
     let release = Command::new("apt-ftparchive")
         .arg("-o")
