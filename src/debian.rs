@@ -53,12 +53,12 @@ pub(crate) fn generate_binary_files(config: &Config, dist_base: &str, pool_base:
 }
 
 pub(crate) fn generate_sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> {
-    eprintln!("generationg sources index");
+    eprintln!("generating sources index");
     let path = PathBuf::from([dist_base, "/main/source/"].concat());
     fs::create_dir_all(&path)?;
 
     let data = Command::new("apt-ftparchive")
-        .arg("packages")
+        .arg("sources")
         .arg(PathBuf::from(pool_base).join("source"))
         .output()
         .map(|data| data.stdout)?;
