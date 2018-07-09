@@ -7,7 +7,6 @@ pub enum Action<'a> {
     ConfigHelp,
     Fetch(&'a str),
     FetchConfig,
-    Unsupported,
     UpdatePackages,
     Update(&'a str, &'a str),
     UpdateRepository,

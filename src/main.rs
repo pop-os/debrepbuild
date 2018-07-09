@@ -8,6 +8,7 @@ extern crate reqwest;
 extern crate select;
 extern crate serde;
 extern crate toml;
+extern crate walkdir;
 extern crate xz2;
 
 #[macro_use]
@@ -91,10 +92,6 @@ fn main() {
                 let _ = app.print_help();
                 exit(1);
             }
-            Action::Unsupported => {
-                eprintln!("unsupported command provided");
-                exit(1);
-            }
         },
         Err(why) => {
             eprintln!("debrep: {}", why);
@@ -138,7 +135,7 @@ fn update_package(sources: &Config, package: &str) {
         }
     }
 
-    if let Err(why) = generate_release_files(&sources) {
+    if let Err(why) = generate_release_files(sources) {
         eprintln!("{}", why);
         exit(1);
     }

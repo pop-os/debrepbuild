@@ -7,7 +7,7 @@ use glob::glob;
 use misc::{self, rsync};
 use std::env;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -60,8 +60,9 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
         Some(DebianPath::URL { ref url, ref checksum }) => {
             unimplemented!()
         }
-        Some(DebianPath::Branch { ref branch }) => {
-            unimplemented!()
+        Some(DebianPath::Branch { ref url, ref branch }) => {
+            merge_branch(url, branch)
+                .map_err(|why| SourceError::GitBranch { branch: branch.clone(), why })?;
         }
         None => {
             match pwd.join(&["debian/", &item.name, "/"].concat()) {
@@ -90,15 +91,42 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
         }
     }
 
+    let packages: Vec<String> = match item.depends {
+        Some(ref depends) => {
+            let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()))
+                .flat_map(|deb| misc::match_deb(&deb, depends))
+                .collect::<Vec<(String, usize)>>();
+
+            temp.sort_by(|a, b| a.1.cmp(&b.1));
+            temp.into_iter().map(|x| x.0).collect::<Vec<String>>()
+        }
+        None => Vec::new()
+    };
+
     pre_flight(
         branch,
         &item.name,
         &project_directory,
         item.build_on.as_ref().map(|x| x.as_str()),
+        &packages,
     )?;
 
     let _ = env::set_current_dir("..");
     misc::mv_to_pool("build", branch).map_err(|why| SourceError::PackageMoving { why })
+}
+
+fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
+    fs::create_dir_all("/tmp/debrep")?;
+    fs::remove_dir_all("/tmp/debrep/repo")?;
+    Command::new("git")
+        .args(&["clone", "-b", branch, url, "/tmp/debrep/repo"])
+        .status()?;
+
+    Command::new("cp")
+        .args(&["-r", "/tmp/debrep/repo/debian", "."])
+        .status()?;
+
+    Ok(())
 }
 
 fn pre_flight(
@@ -106,6 +134,7 @@ fn pre_flight(
     name: &str,
     dir: &Path,
     build_on: Option<&str>,
+    packages: &[String]
 ) -> Result<(), SourceError> {
     let record_path = PathBuf::from(["../record/", &name].concat());
 
@@ -182,7 +211,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(branch, dir)?;
+    sbuild(branch, dir, packages)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -203,12 +232,18 @@ fn pre_flight(
     result.map_err(|why| SourceError::RecordUpdate { why })
 }
 
-fn sbuild<P: AsRef<Path>>(branch: &str, path: P) -> Result<(), SourceError> {
-    let exit_status = Command::new("sbuild")
-        .arg("-j4")
-        .arg("-d")
-        .arg(branch)
-        .arg(path.as_ref())
+fn sbuild<P: AsRef<Path>>(branch: &str, path: P, extra_packages: &[String]) -> Result<(), SourceError> {
+    let mut command = Command::new("sbuild");
+    for p in extra_packages {
+        command.arg(&["--extra-package=", p].concat());
+    }
+    command.arg("-d");
+    command.arg(branch);
+    command.arg(path.as_ref());
+
+    eprintln!("DEBUG: {:?}", command);
+
+    let exit_status = command
         .status()
         .map_err(|why| SourceError::BuildCommand { why })?;
 

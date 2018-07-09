@@ -7,6 +7,33 @@ use std::process::Command;
 
 use libc;
 use md5;
+use walkdir::{DirEntry, WalkDir};
+
+pub fn walk_debs(path: &Path) -> Box<Iterator<Item = DirEntry>> {
+    fn is_deb(entry: &DirEntry) -> bool {
+        if entry.path().is_dir() {
+            true
+        } else {
+            entry.file_name().to_str().map_or(false, |e| e.ends_with(".deb"))
+        }
+    }
+
+    Box::new(WalkDir::new(path).into_iter().filter_entry(|e| is_deb(e)).flat_map(|e| e.ok()))
+}
+
+pub fn match_deb(entry: &DirEntry, packages: &[String]) -> Option<(String, usize)> {
+    let path = entry.path();
+    if path.is_dir() {
+        return None
+    }
+
+    entry.file_name().to_str().and_then(|package| {
+        let package = &package[..package.find('_').expect("debian package lacks _ character")];
+
+        packages.iter().position(|x| x.as_str() == package)
+            .and_then(|pos| path.to_str().map(|path| (path.to_owned(), pos)))
+    })
+}
 
 pub fn unlink(link: &Path) -> io::Result<()> {
     CString::new(link.to_path_buf().into_os_string().into_vec())
@@ -15,7 +42,6 @@ pub fn unlink(link: &Path) -> io::Result<()> {
             0 => Ok(()),
             _ => Err(io::Error::last_os_error())
         })
-
 }
 
 pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {

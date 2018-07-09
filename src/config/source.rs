@@ -13,7 +13,7 @@ pub struct SourceAsset {
 #[serde(untagged)]
 pub enum DebianPath {
     URL { url: String, checksum: String },
-    Branch { branch: String }
+    Branch { url: String, branch: String }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -31,6 +31,7 @@ pub struct Source {
     pub prebuild:  Option<Vec<String>>,
     pub build_on:  Option<String>,
     pub debian:    Option<DebianPath>,
+    pub depends:   Option<Vec<String>>,
     #[serde(default)]
     pub priority:  usize,
 }

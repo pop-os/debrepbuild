@@ -13,6 +13,8 @@ pub enum SourceError {
     BuildCommand { why: io::Error },
     #[fail(display = "failed to build from source")]
     BuildFailed,
+    #[fail(display = "failed to switch to branch {}: {}", branch, why)]
+    GitBranch { branch: String, why: io::Error },
     #[fail(display = "git command failed")]
     GitFailed,
     #[fail(display = "unable to git '{}': {}", item, why)]
