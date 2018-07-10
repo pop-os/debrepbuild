@@ -114,7 +114,7 @@ pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(),
     )?;
 
     let _ = env::set_current_dir("..");
-    mv_to_pool("build", branch).map_err(|why| SourceError::PackageMoving { why })
+    mv_to_pool("build", branch, item.keep_source).map_err(|why| SourceError::PackageMoving { why })
 }
 
 fn merge_branch(url: &str, branch: &str) -> io::Result<()> {

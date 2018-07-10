@@ -1,12 +1,21 @@
 use std::{io, fs};
 use std::path::{Path, PathBuf};
 
-pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str) -> io::Result<()> {
-    pool(path.as_ref(), archive, |src, dst| fs::rename(src, dst))
+pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str, keep_source: bool) -> io::Result<()> {
+    pool(path.as_ref(), archive, |src, dst| if keep_source || !is_source(src) {
+        fs::rename(src, dst)
+    } else {
+        fs::remove_file(src)
+    })
 }
 
 pub fn cp_to_pool<P: AsRef<Path>>(path: P, archive: &str) -> io::Result<()> {
     pool(path.as_ref(), archive, |src, dst| fs::copy(src, dst).map(|_| ()))
+}
+
+fn is_source(src: &Path) -> bool {
+    let path = src.to_str().unwrap();
+    path.ends_with(".dsc") || path.ends_with(".tar.gz") || path.ends_with(".tar.xz")
 }
 
 fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, action: F) -> io::Result<()> {

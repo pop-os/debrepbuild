@@ -30,8 +30,12 @@ pub struct Source {
     pub assets:    Option<Vec<SourceAsset>>,
     pub prebuild:  Option<Vec<String>>,
     pub build_on:  Option<String>,
+    #[serde(default = "default_build_source")]
+    pub keep_source: bool,
     pub debian:    Option<DebianPath>,
     pub depends:   Option<Vec<String>>,
     #[serde(default)]
     pub priority:  usize,
 }
+
+fn default_build_source() -> bool { true }
