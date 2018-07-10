@@ -20,8 +20,9 @@ xz2 = "0.1.4"
 deflate = { version = "0.7.18", features = ["gzip"] }
 select = "0.4.2"
 glob = "0.2.11"
-md5 = "0.3.7"
 libc = "0.2"
 clap = "2.32.0"
 walkdir = "2.1.4"
-log = { version = "0.4.3", features = ["release_max_level_info"] }
+log = { version = "0.4.3" }
+sha2 = "0.7.1"
+fern = "0.5.6"

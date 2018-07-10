@@ -5,6 +5,7 @@ use super::SourceError;
 use config::{DebianPath, Source};
 use glob::glob;
 use misc::{self, rsync};
+use pool::mv_to_pool;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -112,7 +113,7 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
     )?;
 
     let _ = env::set_current_dir("..");
-    misc::mv_to_pool("build", branch).map_err(|why| SourceError::PackageMoving { why })
+    mv_to_pool("build", branch).map_err(|why| SourceError::PackageMoving { why })
 }
 
 fn merge_branch(url: &str, branch: &str) -> io::Result<()> {

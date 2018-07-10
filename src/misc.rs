@@ -2,11 +2,12 @@ use std::ffi::CString;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::ffi::OsStringExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
+use reqwest::Client;
 
 use libc;
-use md5;
+use sha2::{Sha256, Digest};
 use walkdir::{DirEntry, WalkDir};
 
 pub fn walk_debs(path: &Path) -> Box<Iterator<Item = DirEntry>> {
@@ -63,123 +64,52 @@ pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
         })
 }
 
-pub fn md5_digest(file: File) -> io::Result<String> {
-    let mut context = md5::Context::new();
+pub fn download_file(client: &Client, url: &str, path: &Path, checksum: &str) -> io::Result<u64> {
+    let mut file = if path.exists() {
+        let digest = sha2_256_digest(File::open(path)?)?;
+        if &digest == checksum {
+            return Ok(0);
+        }
+
+        File::open(path)?
+    } else {
+
+        File::create(path)?
+    };
+
+    let downloaded = client
+        .get(url)
+        .send()
+        .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest get failed: {}", why)))?
+        .copy_to(&mut file)
+        .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest copy failed: {}", why)))?;
+
+    let digest = sha2_256_digest(File::open(path)?)?;
+    if &digest == checksum {
+        Ok(downloaded)
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("checksum does not match for {}", path.display())
+        ))
+    }
+}
+
+pub fn sha2_256_digest(file: File) -> io::Result<String> {
+    let mut hasher = Sha256::default();
     let data = &mut BufReader::new(file);
     loop {
         let read = {
             let buffer = data.fill_buf()?;
             if buffer.len() == 0 { break }
-            context.consume(buffer);
+            hasher.input(buffer);
             buffer.len()
         };
 
         data.consume(read);
     }
 
-    Ok(format!("{:x}", context.compute()))
-}
-
-pub fn extract(src: &Path, dst: &Path) -> io::Result<()> {
-    match src.file_name().and_then(|x| x.to_str()) {
-        Some(filename) => {
-            if filename.ends_with(".zip") {
-                unzip(src, dst)
-            } else if filename.ends_with(".tar.gz") || filename.ends_with(".tar.xz") {
-                untar(src, dst)
-            } else {
-                unimplemented!()
-            }
-        }
-        None => unimplemented!()
-    }
-}
-
-pub fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
-    if dst.exists() {
-        fs::remove_dir_all(dst)?;
-    }
-
-    fs::create_dir_all(dst)
-        .and_then(|_| Command::new("unzip")
-            .arg(path)
-            .arg("-d")
-            .arg(dst)
-            .status()
-            .and_then(|x| if x.success() {
-                Ok(())
-            } else {
-                Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
-            })
-        )
-}
-
-pub fn untar(path: &Path, dst: &Path) -> io::Result<()> {
-    if dst.exists() {
-        fs::remove_dir_all(dst)?;
-    }
-
-    fs::create_dir_all(dst)
-        .and_then(|_| Command::new("tar")
-            .arg("-xvf")
-            .arg(path)
-            .arg("-C")
-            .arg(dst)
-            .args(&["--strip-components", "1"])
-            .status()
-            .and_then(|x| if x.success() {
-                Ok(())
-            } else {
-                Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
-            })
-        )
-}
-
-pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str) -> io::Result<()> {
-    pool(path.as_ref(), archive, |src, dst| fs::rename(src, dst))
-}
-
-pub fn cp_to_pool<P: AsRef<Path>>(path: P, archive: &str) -> io::Result<()> {
-    pool(path.as_ref(), archive, |src, dst| fs::copy(src, dst).map(|_| ()))
-}
-
-fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, action: F) -> io::Result<()> {
-    for entry in path.read_dir()? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            continue;
-        }
-
-        let filename = path.file_name().and_then(|x| x.to_str());
-        let filestem = path.file_stem().and_then(|x| x.to_str());
-
-        if let (Some(filename), Some(filestem)) = (filename, filestem) {
-            let mut package = &filename[..filename.find('_').unwrap_or(0)];
-
-            let is_source = ["dsc", "tar.xz"].into_iter().any(|ext| filename.ends_with(ext));
-            let destination = if is_source {
-                PathBuf::from(
-                    ["repo/pool/", archive, "/main/source/", &package[0..1], "/", package].concat()
-                )
-            } else {
-                if package.ends_with("-dbgsym") {
-                    package = &package[..package.len() - 7];
-                }
-
-                let arch = &filestem[filestem.rfind('_').unwrap_or(0) + 1..];
-                PathBuf::from(
-                    ["repo/pool/", archive, "/main/binary-", arch, "/", &package[0..1], "/", package].concat(),
-                )
-            };
-
-            info!("creating in pool: {:?}", destination);
-            fs::create_dir_all(&destination)?;
-            action(&path, &destination.join(filename))?;
-        }
-    }
-
-    Ok(())
+    Ok(format!("{:x}", hasher.result()))
 }
 
 // NOTE: The following functions are implemented within Rust's standard in 1.26.0

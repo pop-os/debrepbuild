@@ -1,6 +1,7 @@
 use super::SourceError;
 use config::{Source, SourceLocation};
-use misc::{extract, md5_digest};
+use extract::extract;
+use misc::sha2_256_digest;
 use rayon::prelude::*;
 use reqwest;
 use std::fs::File;
@@ -33,7 +34,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError
 
     let requires_download = if destination.is_file() {
         let digest = File::open(&destination)
-            .and_then(md5_digest)
+            .and_then(sha2_256_digest)
             .map_err(|why| SourceError::File {
                 file: destination.clone(),
                 why
@@ -57,7 +58,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError
     }
 
     let digest = File::open(&destination)
-        .and_then(md5_digest)
+        .and_then(sha2_256_digest)
         .map_err(|why| SourceError::File {
             file: destination.clone(),
             why

@@ -1,12 +1,13 @@
 extern crate deflate;
 extern crate failure;
+extern crate fern;
 extern crate glob;
 extern crate libc;
-extern crate md5;
 extern crate rayon;
 extern crate reqwest;
 extern crate select;
 extern crate serde;
+extern crate sha2;
 extern crate toml;
 extern crate walkdir;
 extern crate xz2;
@@ -24,7 +25,9 @@ mod cli;
 pub mod config;
 pub mod debian;
 mod direct;
+mod extract;
 pub mod misc;
+pub mod pool;
 mod sources;
 mod update;
 
@@ -32,6 +35,7 @@ use clap::{Arg, App, SubCommand};
 use cli::Action;
 use config::{Config, ConfigFetch};
 use direct::download::DownloadResult;
+use pool::cp_to_pool;
 use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -40,7 +44,31 @@ use update::update_packages;
 use reqwest::Client;
 use sources::build::build;
 
+fn setup_logger() -> Result<(), fern::InitError> {
+    fern::Dispatch::new()
+        // Exclude logs for crates that we use
+        .level(log::LevelFilter::Off)
+        // Include only the logs for this binary
+        .level_for("debrep", log::LevelFilter::Debug)
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}] {}: {}",
+                record.level(),
+                {
+                    let target = record.target();
+                    target.find(':').map_or(target, |pos| &target[..pos])
+                },
+                message
+            ))
+        })
+        .chain(std::io::stderr())
+        .apply()?;
+    Ok(())
+}
+
 fn main() {
+    setup_logger().unwrap();
+
     let mut app = App::new("Debian Repository Builder")
         .about("Creates and maintains debian repositories")
         .author(crate_authors!())
@@ -131,7 +159,7 @@ fn update_package(sources: &Config, package: &str) {
     let include_dir = Path::new("include");
     if include_dir.is_dir() {
         info!("copying packages from {}", include_dir.display());
-        if let Err(why) = misc::cp_to_pool("include", &sources.archive) {
+        if let Err(why) = cp_to_pool("include", &sources.archive) {
             error!("failed to copy packages from include directory: {}", why);
             exit(1);
         }
@@ -212,7 +240,7 @@ fn update_repository(sources: &Config) {
     let include_dir = Path::new("include");
     if include_dir.is_dir() {
         info!("copying packages from {}", include_dir.display());
-        if let Err(why) = misc::cp_to_pool("include", branch) {
+        if let Err(why) = cp_to_pool("include", branch) {
             error!("failed to copy packages from include directory: {}", why);
             exit(1);
         }

@@ -6,7 +6,7 @@ use std::io;
 use std::path::Path;
 
 use config::{Direct, PackageEntry};
-use misc::md5_digest;
+use misc::sha2_256_digest;
 
 /// Possible errors that may happen when attempting to download Debian packages and source code.
 #[derive(Debug, Fail)]
@@ -41,7 +41,7 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> Result<Download
             })?;
 
             if let Some(ref checksum) = item.checksum {
-                let digest = md5_digest(file)
+                let digest = sha2_256_digest(file)
                     .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
 
                 if &digest == checksum {
@@ -97,7 +97,7 @@ fn validate(item: &Direct, dst: &Path) -> Result<(), DownloadError> {
         .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why})
         .and_then(|file| {
             item.checksum.as_ref().map_or(Ok(()), |checksum| {
-                let digest = md5_digest(file)
+                let digest = sha2_256_digest(file)
                     .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
                 if &digest == checksum {
                     Ok(())
