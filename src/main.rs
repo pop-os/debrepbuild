@@ -80,6 +80,10 @@ fn main() {
             SubCommand::with_name("build")
                 .about("Builds a new repo, or updates an existing one")
                 .arg(Arg::with_name("package").required(false))
+                .arg(Arg::with_name("force")
+                    .short("f")
+                    .long("force")
+                    .help("forces the package to be built"))
         ).subcommand(
             SubCommand::with_name("config")
                 .about("Gets or sets fields within the repo config")
@@ -94,7 +98,7 @@ fn main() {
 
     match config::parse() {
         Ok(mut sources) => match cli::requested_action(&matches) {
-            Action::Build(package) => update_package(&sources, package),
+            Action::Build(package, force) => update_package(&sources, package, force),
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
                 Some(value) => println!("{}: {}", key, value),
@@ -136,7 +140,8 @@ fn main() {
 pub const SHARED_ASSETS: &str = "assets/share/";
 pub const PACKAGE_ASSETS: &str = "assets/packages/";
 
-fn update_package(sources: &Config, package: &str) {
+fn update_package(sources: &Config, package: &str, force: bool) {
+    info!("updating {}{}", package, if force { " with force" } else { "" });
     if let Some(ref source) = sources.direct.as_ref().and_then(|ddl| ddl.iter().find(|x| x.name == package)) {
         if let Err(why) = direct::download::download(&Client::new(), source, &sources.archive) {
             error!("failed to download {}: {}", package, why);
@@ -152,8 +157,7 @@ fn update_package(sources: &Config, package: &str) {
         }
 
         let pwd = env::current_dir().unwrap();
-
-        if let Err(why) = build(source, &pwd, &sources.archive) {
+        if let Err(why) = build(source, &pwd, &sources.archive, force) {
             error!("package '{}' failed to build: {}", source.name, why);
             exit(1);
         }
@@ -227,7 +231,7 @@ fn update_repository(sources: &Config) {
         }
 
         for source in sources {
-            if let Err(why) = build(source, &pwd, branch) {
+            if let Err(why) = build(source, &pwd, branch, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 package_failed = true;
                 break

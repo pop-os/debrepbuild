@@ -33,7 +33,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError> {
+pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(), SourceError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
     let _ = fs::create_dir_all(&project_directory);
@@ -110,6 +110,7 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
         &project_directory,
         item.build_on.as_ref().map(|x| x.as_str()),
         &packages,
+        force,
     )?;
 
     let _ = env::set_current_dir("..");
@@ -135,7 +136,8 @@ fn pre_flight(
     name: &str,
     dir: &Path,
     build_on: Option<&str>,
-    packages: &[String]
+    packages: &[String],
+    force: bool
 ) -> Result<(), SourceError> {
     let record_path = PathBuf::from(["../record/", &name].concat());
 
@@ -149,7 +151,7 @@ fn pre_flight(
         Some("changelog") => {
             let version = changelog(dir).map_err(|why| SourceError::Changelog { why })?;
 
-            if record_path.exists() {
+            if !force && record_path.exists() {
                 let record = misc::read_to_string(&record_path)
                     .map_err(|why| SourceError::RecordRead { why })?;
                 let mut record = record.lines();
@@ -171,7 +173,7 @@ fn pre_flight(
             let (branch, commit) = git(dir).map_err(|why| SourceError::GitVersion { why })?;
             let mut append = false;
 
-            if record_path.exists() {
+            if !force && record_path.exists() {
                 let record = misc::read_to_string(&record_path)
                     .map_err(|why| SourceError::RecordRead { why })?;
                 let mut record = record.lines();
