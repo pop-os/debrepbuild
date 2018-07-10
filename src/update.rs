@@ -66,7 +66,7 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                                         direct.version = version.to_owned();
                                         direct.url = url.to_string();
 
-                                        eprintln!(
+                                        info!(
                                             "updated {}:\n  version: {}\n  url: {}",
                                             direct.name, version, url
                                         );
@@ -112,7 +112,7 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                                         [&values[0], "/", &values[1], version, &values[2]].concat()
                                     };
 
-                                    eprintln!(
+                                    info!(
                                         "updated {}:\n  version: {}\n  url: {}",
                                         direct.name, version, url
                                     );
@@ -163,7 +163,7 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                                                 direct.version = version.to_owned();
                                                 direct.url = url.clone();
 
-                                                eprintln!(
+                                                info!(
                                                     "updated {}:\n  version: {}\n  url: {}",
                                                     direct.name, version, url
                                                 );
@@ -187,7 +187,7 @@ pub fn update_packages(sources: &mut Config) -> Result<(), UpdateError> {
                     _ => (),
                 }
             } else {
-                eprintln!("warning: {} requires manual updating", direct.name);
+                warn!("{} requires manual updating", direct.name);
             }
         }
 

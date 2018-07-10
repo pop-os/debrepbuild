@@ -26,16 +26,15 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
                     .file_type()
                     .is_symlink()
             {
-                eprintln!("link already found");
                 return Ok(LinkedArtifact(dst.to_owned().to_path_buf()));
             } else {
-                eprintln!("removing {}", dst.display());
+                info!("removing link at {}", dst.display());
                 unlink(&dst).map_err(|why| SourceError::LinkRemoval { why })?;
             }
         }
     }
 
-    eprintln!("linking {} to {}", src.display(), dst.display());
+    info!("linking {} to {}", src.display(), dst.display());
     fs::hard_link(src, &dst)
         .map(|_| LinkedArtifact(dst.to_owned().to_path_buf()))
         .map_err(|why| SourceError::Link { why })

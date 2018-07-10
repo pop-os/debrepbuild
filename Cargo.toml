@@ -24,3 +24,4 @@ md5 = "0.3.7"
 libc = "0.2"
 clap = "2.32.0"
 walkdir = "2.1.4"
+log = { version = "0.4.3", features = ["release_max_level_info"] }

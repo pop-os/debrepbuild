@@ -21,10 +21,7 @@ fn fetch_assets(
         let path = entry.path();
         if path.is_dir() {
             let relative = path.strip_prefix(src).unwrap();
-            // let relative = relative.strip_prefix("/").unwrap();
             let new_path = dst.join(relative);
-
-            eprintln!("creating directory at {:?}", new_path);
             fs::create_dir(new_path);
         } else {
             linked.push(link_artifact(&path.canonicalize().unwrap(), dst)?);
@@ -36,7 +33,7 @@ fn fetch_assets(
 
 /// Attempts to build Debian packages from a given software repository.
 pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError> {
-    eprintln!("attempting to build {}", &item.name);
+    info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
     let _ = fs::create_dir_all(&project_directory);
 
@@ -51,11 +48,9 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
 
     if let Some(ref assets) = item.assets {
         for asset in assets {
-            eprintln!("asset: {:#?}", asset);
             if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
                 for file in globs.flat_map(|x| x.ok()) {
                     let dst = project_directory.join(&asset.dst);
-                    eprintln!("{:?} -> {:?}", file, dst);
                     linked.push(link_artifact(&file, &dst)?);
                 }
             }
@@ -84,7 +79,6 @@ pub fn build(item: &Source, pwd: &Path, branch: &str) -> Result<(), SourceError>
     let _ = env::set_current_dir("build");
 
     if let Some(ref prebuild) = item.prebuild {
-        eprintln!("prebuilding {}", item.name);
         for command in prebuild {
             let exit_status = Command::new("sh")
                 .args(&["-c", command])
@@ -162,14 +156,14 @@ fn pre_flight(
                 if let Some(source) = record.next() {
                     if let Some(recorded_version) = record.next() {
                         if source == "changelog" && recorded_version == version {
-                            println!("{} has already been built -- skipping", name);
+                            info!("{} has already been built -- skipping", name);
                             return Ok(());
                         }
                     }
                 }
             }
 
-            println!("building {} at changelog version {}", name, version);
+            info!("building {} at changelog version {}", name, version);
             Some(Record::Changelog(version))
         }
         Some("commit") => {
@@ -189,7 +183,7 @@ fn pre_flight(
                                 (fields.next(), fields.next())
                             {
                                 if rec_branch == branch && rec_commit == commit {
-                                    println!("{} has already been built -- skipping", name);
+                                    info!("{} has already been built -- skipping", name);
                                     return Ok(());
                                 }
                             }
@@ -199,7 +193,7 @@ fn pre_flight(
                 }
             }
 
-            println!(
+            info!(
                 "building {} at git branch {}; commit {}",
                 name, branch, commit
             );
@@ -247,17 +241,17 @@ fn sbuild<P: AsRef<Path>>(branch: &str, path: P, extra_packages: &[String]) -> R
     command.arg(branch);
     command.arg(path.as_ref());
 
-    eprintln!("DEBUG: {:?}", command);
+    debug!("executing {:?}", command);
 
     let exit_status = command
         .status()
         .map_err(|why| SourceError::BuildCommand { why })?;
 
     if exit_status.success() {
-        eprintln!("build succeeded!");
+        info!("build succeeded!");
         Ok(())
     } else {
-        eprintln!("build failed!");
+        error!("build failed!");
         Err(SourceError::BuildFailed)
     }
 }

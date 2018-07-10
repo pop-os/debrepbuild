@@ -45,7 +45,7 @@ pub fn unlink(link: &Path) -> io::Result<()> {
 }
 
 pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
-    eprintln!("rsyncing {} to {}", src.display(), dst.display());
+    info!("rsyncing {} to {}", src.display(), dst.display());
 
     if src.is_dir() {
         fs::create_dir_all(src)?;
@@ -173,7 +173,7 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, actio
                 )
             };
 
-            eprintln!("creating in pool: {:?}", destination);
+            info!("creating in pool: {:?}", destination);
             fs::create_dir_all(&destination)?;
             action(&path, &destination.join(filename))?;
         }

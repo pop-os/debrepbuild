@@ -9,11 +9,7 @@ use std::process::Command;
 
 /// Downloads source code repositories in parallel.
 pub fn parallel(items: &[Source]) -> Vec<Result<(), SourceError>> {
-    eprintln!("downloading sources in parallel");
-    items
-        .par_iter()
-        .map(download)
-        .collect()
+    items.par_iter().map(download).collect()
 }
 
 pub fn download(item: &Source) -> Result<(), SourceError> {
@@ -49,7 +45,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), SourceError
     };
 
     if requires_download {
-        eprintln!("checksum did not match for {}. downloading from {}", &item.name, url);
+        warn!("checksum did not match for {}. downloading from {}", &item.name, url);
         let mut file = File::create(&destination).map_err(|why| SourceError::File {
             file: destination.clone(),
             why
@@ -103,7 +99,7 @@ fn download_git(url: &str) -> Result<(), SourceError> {
     let path = PathBuf::from(["build/", &name].concat());
 
     if path.exists() {
-        eprintln!("pulling {}", name);
+        info!("pulling {}", name);
         let exit_status = Command::new("git")
             .arg("-C")
             .arg(&path)
@@ -118,7 +114,7 @@ fn download_git(url: &str) -> Result<(), SourceError> {
             return Err(SourceError::GitFailed);
         }
     } else {
-        eprintln!("cloning {}", name);
+        info!("cloning {}", name);
         let exit_status = Command::new("git")
             .args(&["-C", "build", "clone", &url])
             .status()

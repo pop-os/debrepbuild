@@ -13,7 +13,7 @@ use config::Config;
 /// Generates the binary files from Debian packages that exist within the pool, using
 /// `apt-ftparchive`
 pub(crate) fn generate_binary_files(config: &Config, dist_base: &str, pool_base: &str) -> io::Result<()> {
-    eprintln!("generating binary files");
+    info!("generating binary files");
     let branch = PathBuf::from([dist_base, "/main/"].concat());
 
     for directory in fs::read_dir(pool_base)? {
@@ -53,7 +53,7 @@ pub(crate) fn generate_binary_files(config: &Config, dist_base: &str, pool_base:
 }
 
 pub(crate) fn generate_sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> {
-    eprintln!("generating sources index");
+    info!("generating sources index");
     let path = PathBuf::from([dist_base, "/main/source/"].concat());
     fs::create_dir_all(&path)?;
 
@@ -82,7 +82,7 @@ fn compress(name: &str, path: &Path, data: &[u8]) -> io::Result<()> {
 
 /// Generates the dists release file via `apt-ftparchive`.
 pub(crate) fn generate_dists_release(config: &Config, base: &str) -> io::Result<()> {
-    eprintln!("generating dists release files");
+    info!("generating dists release files");
 
     let cwd = env::current_dir()?;
     env::set_current_dir(base)?;
@@ -131,7 +131,7 @@ pub(crate) fn generate_dists_release(config: &Config, base: &str) -> io::Result<
 
 /// Generates the `InRelease` file from the `Release` file via `gpg --clearsign`.
 pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
-    eprintln!("generating InRelease file");
+    info!("generating InRelease file");
     let exit_status = Command::new("gpg")
         .args(&[
             "--clearsign",
@@ -159,7 +159,7 @@ pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) 
 
 /// Generates the `Release.gpg` file from the `Release` file via `gpg -abs`
 pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
-    eprintln!("generating Release.gpg file");
+    info!("generating Release.gpg file");
     let exit_status = Command::new("gpg")
         .args(&[
             "-abs",

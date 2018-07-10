@@ -16,6 +16,8 @@ extern crate clap;
 #[macro_use]
 extern crate failure_derive;
 #[macro_use]
+extern crate log;
+#[macro_use]
 extern crate serde_derive;
 
 mod cli;
@@ -66,26 +68,26 @@ fn main() {
             Action::Fetch(key) => match sources.fetch(&key) {
                 Some(value) => println!("{}: {}", key, value),
                 None => {
-                    eprintln!("config field not found");
+                    error!("config field not found");
                     exit(1);
                 }
             },
             Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
             Action::Update(key, value) => match sources.update(key, value.to_owned()) {
                 Ok(()) => match sources.write_to_disk() {
-                    Ok(()) => eprintln!("successfully wrote config changes to disk"),
+                    Ok(()) => info!("successfully wrote config changes to disk"),
                     Err(why) => {
-                        eprintln!("failed to write config changes: {}", why);
+                        error!("failed to write config changes: {}", why);
                         exit(1);
                     }
                 },
                 Err(why) => {
-                    eprintln!("failed to update {}: {}", key, why);
+                    error!("failed to update {}: {}", key, why);
                     exit(1);
                 }
             },
             Action::UpdatePackages => if let Err(why) = update_packages(&mut sources) {
-                eprintln!("failed to update config: {}", why);
+                error!("failed to update config: {}", why);
                 exit(1);
             },
             Action::ConfigHelp => {
@@ -94,7 +96,7 @@ fn main() {
             }
         },
         Err(why) => {
-            eprintln!("debrep: {}", why);
+            error!("configuration parsing error: {}", why);
             exit(1);
         }
     }
@@ -106,7 +108,7 @@ pub const PACKAGE_ASSETS: &str = "assets/packages/";
 fn update_package(sources: &Config, package: &str) {
     if let Some(ref source) = sources.direct.as_ref().and_then(|ddl| ddl.iter().find(|x| x.name == package)) {
         if let Err(why) = direct::download::download(&Client::new(), source, &sources.archive) {
-            eprintln!("debrep: failed to download {}: {}", package, why);
+            error!("failed to download {}: {}", package, why);
             exit(1);
         }
         return;
@@ -114,29 +116,29 @@ fn update_package(sources: &Config, package: &str) {
 
     if let Some(ref source) = sources.source.as_ref().and_then(|s| s.iter().find(|x| x.name == package)) {
         if let Err(why) = sources::download::download(source) {
-            eprintln!("debrep: failed to download source {}: {}", package, why);
+            error!("failed to download source {}: {}", package, why);
             exit(1);
         }
 
         let pwd = env::current_dir().unwrap();
 
         if let Err(why) = build(source, &pwd, &sources.archive) {
-            eprintln!("debrep: package '{}' failed to build: {}", source.name, why);
+            error!("package '{}' failed to build: {}", source.name, why);
             exit(1);
         }
     }
 
     let include_dir = Path::new("include");
     if include_dir.is_dir() {
-        eprintln!("copying packages from {}", include_dir.display());
+        info!("copying packages from {}", include_dir.display());
         if let Err(why) = misc::cp_to_pool("include", &sources.archive) {
-            eprintln!("failed to copy packages from include directory: {}", why);
+            error!("failed to copy packages from include directory: {}", why);
             exit(1);
         }
     }
 
     if let Err(why) = generate_release_files(sources) {
-        eprintln!("{}", why);
+        error!("failed to generate dist files: {}", why);
         exit(1);
     }
 }
@@ -148,7 +150,7 @@ fn update_repository(sources: &Config) {
         .collect::<io::Result<()>>();
 
     if let Err(why) = dirs_result {
-        eprintln!("unable to create directories in current directory: {}", why);
+        error!("unable to create directories in current directory: {}", why);
         exit(1);
     }
 
@@ -162,13 +164,13 @@ fn update_repository(sources: &Config) {
             let name = &ddl_sources[id].name;
             match result {
                 Ok(DownloadResult::AlreadyExists) => {
-                    eprintln!("package '{}' already exists", name);
+                    info!("package '{}' already exists", name);
                 }
                 Ok(DownloadResult::Downloaded(bytes)) => {
-                    eprintln!("package '{}' successfully downloaded {} bytes", name, bytes);
+                    info!("package '{}' successfully downloaded {} bytes", name, bytes);
                 }
                 Err(why) => {
-                    eprintln!("package '{}' failed to download: {}", name, why);
+                    error!("package '{}' failed to download: {}", name, why);
                     package_failed = true;
                 }
             }
@@ -184,10 +186,10 @@ fn update_repository(sources: &Config) {
             let name = &sources[id].name;
             match result {
                 Ok(()) => {
-                    eprintln!("package '{}' was successfully fetched", name);
+                    info!("package '{}' was successfully fetched", name);
                 }
                 Err(why) => {
-                    eprintln!("package '{}' failed to download: {}", name, why);
+                    error!("package '{}' failed to download: {}", name, why);
                     package_failed = true;
                 }
             }
@@ -195,7 +197,7 @@ fn update_repository(sources: &Config) {
 
         for source in sources {
             if let Err(why) = build(source, &pwd, branch) {
-                eprintln!("package '{}' failed to build: {}", source.name, why);
+                error!("package '{}' failed to build: {}", source.name, why);
                 package_failed = true;
                 break
             }
@@ -203,21 +205,21 @@ fn update_repository(sources: &Config) {
     }
 
     if package_failed {
-        eprintln!("exiting due to error");
+        error!("exiting due to error");
         exit(1);
     }
 
     let include_dir = Path::new("include");
     if include_dir.is_dir() {
-        eprintln!("copying packages from {}", include_dir.display());
+        info!("copying packages from {}", include_dir.display());
         if let Err(why) = misc::cp_to_pool("include", branch) {
-            eprintln!("failed to copy packages from include directory: {}", why);
+            error!("failed to copy packages from include directory: {}", why);
             exit(1);
         }
     }
 
-    if let Err(why) = generate_release_files(&sources) {
-        eprintln!("{}", why);
+    if let Err(why) = generate_release_files(sources) {
+        error!("failed to generate dist files: {}", why);
         exit(1);
     }
 }
