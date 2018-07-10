@@ -44,6 +44,8 @@ use update::update_packages;
 use reqwest::Client;
 use sources::build::build;
 
+include!(concat!(env!("OUT_DIR"), "/version.rs"));
+
 fn setup_logger() -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         // Exclude logs for crates that we use
@@ -68,11 +70,12 @@ fn setup_logger() -> Result<(), fern::InitError> {
 
 fn main() {
     setup_logger().unwrap();
+    let version = format!("{} ({})", crate_version!(), short_sha());
 
     let mut app = App::new("Debian Repository Builder")
         .about("Creates and maintains debian repositories")
         .author(crate_authors!())
-        .version(crate_version!())
+        .version(version.as_str())
         .subcommand(
             SubCommand::with_name("build")
                 .about("Builds a new repo, or updates an existing one")
