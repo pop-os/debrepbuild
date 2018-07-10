@@ -33,7 +33,9 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, actio
                     package = &package[..package.len() - 7];
                 }
 
-                let arch = &filestem[filestem.rfind('_').unwrap_or(0) + 1..];
+                let mut arch = &filestem[filestem.rfind('_').unwrap_or(0) + 1..];
+                arch = arch.find('-').map_or(arch, |pos| &arch[..pos]);
+
                 PathBuf::from(
                     ["repo/pool/", archive, "/main/binary-", arch, "/", &package[0..1], "/", package].concat(),
                 )
