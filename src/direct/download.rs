@@ -52,7 +52,7 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
             };
 
             PathBuf::from(
-                [ "repo/pool", branch, &dst, &name[0..1], "/", name, "/", &filename ].concat()
+                [ "repo/pool/", branch, &dst, &name[0..1], "/", name, "/", &filename ].concat()
             )
         };
 
