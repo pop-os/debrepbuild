@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Write};
-use std::path::PathBuf;
 use toml::{self, de};
 use misc;
 
@@ -158,14 +157,6 @@ impl ConfigFetch for Config {
     }
 }
 
-pub trait PackageEntry {
-    fn destination(&self, &str) -> PathBuf;
-    fn file_name(&self) -> String;
-    fn get_name(&self) -> &str;
-    fn get_url(&self) -> &str;
-    fn get_version(&self) -> &str;
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Update {
     pub source:     String,
@@ -176,13 +167,20 @@ pub struct Update {
     pub build_from: Option<Vec<String>>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DirectPath {
+    pub checksum: Option<String>,
+    pub arch:     Option<String>,
+    pub name:     Option<String>,
+    pub url:      String,
+}
+
 /// A Debian package which already exists and may be downloaded directly.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Direct {
     pub name:      String,
     pub version:   String,
-    pub arch:      String,
-    pub url:       String,
+    pub urls:      Vec<DirectPath>,
     pub checksum:  Option<String>,
     pub update:    Option<Update>,
 }
@@ -192,8 +190,7 @@ impl ConfigFetch for Direct {
         match key {
             "name" => Some(Cow::Borrowed(&self.name)),
             "version" => Some(Cow::Borrowed(&self.version)),
-            "arch" => Some(Cow::Borrowed(&self.arch)),
-            "url" => Some(Cow::Borrowed(&self.url)),
+            "urls" => Some(Cow::Owned(format!("{:#?}", self.urls))),
             _ => None,
         }
     }
@@ -202,50 +199,12 @@ impl ConfigFetch for Direct {
         match key {
             "name" => self.name = value,
             "version" => self.version = value,
-            "arch" => self.arch = value,
-            "url" => self.url = value,
             _ => return Err(ConfigError::InvalidKey),
         }
 
         Ok(())
     }
 }
-
-impl PackageEntry for Direct {
-    fn get_version(&self) -> &str { &self.version }
-
-    fn get_url(&self) -> &str { &self.url }
-
-    fn get_name(&self) -> &str { &self.name }
-
-    fn file_name(&self) -> String {
-        [
-            self.get_name(),
-            "_",
-            self.get_version(),
-            "_",
-            &self.arch,
-            ".deb",
-        ].concat()
-    }
-
-    fn destination(&self, branch: &str) -> PathBuf {
-        PathBuf::from(
-            [
-                "repo/pool/",
-                branch,
-                "/main/binary-",
-                &self.arch,
-                "/",
-                &self.name[0..1],
-                "/",
-                &self.name,
-                "/",
-            ].concat(),
-        )
-    }
-}
-
 
 pub fn parse() -> Result<Config, ParsingError> {
     misc::read(SOURCES)

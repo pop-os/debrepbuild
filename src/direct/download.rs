@@ -1,23 +1,10 @@
 use rayon::prelude::*;
-use reqwest::{self, Client, Response};
-use reqwest::header::ContentLength;
-use std::fs::{create_dir_all, File};
+use reqwest::Client;
 use std::io;
-use std::path::Path;
+use std::path::PathBuf;
 
-use config::{Direct, PackageEntry};
-use misc::sha2_256_digest;
-
-/// Possible errors that may happen when attempting to download Debian packages and source code.
-#[derive(Debug, Fail)]
-pub enum DownloadError {
-    #[fail(display = "unable to download '{}': {}", item, why)]
-    Request { item: String, why: reqwest::Error },
-    #[fail(display = "unable to open '{}': {}", item, why)]
-    File { item: String, why: io::Error },
-    #[fail(display = "downloaded archive has an invalid checksum: expected {}, received {}", expected, received)]
-    InvalidChecksum { expected: String, received: String }
-}
+use config::Direct;
+use misc;
 
 /// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
@@ -26,102 +13,59 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: &Client, item: &Direct, branch: &str) -> Result<DownloadResult, DownloadError> {
-    info!("downloading package named {}", item.get_name());
+pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<DownloadResult> {
+    info!("downloading package named {}", item.name);
 
-    let parent = item.destination(branch);
-    let filename = item.file_name();
-    let destination = parent.join(filename);
+    fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
+        [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
+    }
 
-    let dest_result = if destination.exists() {
-        if destination.is_file() {
-            let mut file = File::open(&destination).map_err(|why| DownloadError::File {
-                item: item.get_name().to_owned(),
-                why,
-            })?;
+    let mut downloaded = 0;
+    for file_item in &item.urls {
+        let destination = {
+            let name: &str = file_item.name.as_ref().map_or(&item.name, |x| &x);
+            let file = &file_item.url[file_item.url.rfind('/').unwrap_or(0) + 1..];
 
-            if let Some(ref checksum) = item.checksum {
-                let digest = sha2_256_digest(file)
-                    .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
-
-                if &digest == checksum {
-                    return Ok(DownloadResult::AlreadyExists);
+            let ext_pos = {
+                let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
+                match &file[ext_pos..] {
+                    "gz" | "xz" => match &file[ext_pos - 4..ext_pos - 1] {
+                        "tar" => ext_pos = ext_pos - 4,
+                        _ => ()
+                    }
+                    _ => ()
                 }
-            } else {
-                let capacity = file.metadata().map(|x| x.len()).unwrap_or(0);
+                ext_pos
+            };
 
-                let response = client
-                    .head(item.get_url())
-                    .send()
-                    .map_err(|why| DownloadError::Request {
-                        item: item.get_name().to_owned(),
-                        why,
-                    })?;
+            let extension = &file[ext_pos..];
+            let arch = match file_item.arch.as_ref() {
+                Some(ref arch) => arch.as_str(),
+                None => misc::get_arch_from_stem(&file[..ext_pos - 1]),
+            };
 
-                if check_length(&response, capacity) {
-                    return Ok(DownloadResult::AlreadyExists);
-                }
-            }
-        }
+            let filename = &gen_filename(name, &item.version, arch, extension);
 
-        File::create(&destination)
-    } else {
-        create_dir_all(&parent).and_then(|_| File::create(&destination))
-    };
+            let dst = match extension {
+                "tar.gz" | "tar.xz" | "dsc" => "/main/source/".into(),
+                _ => ["/main/binary-", arch, "/"].concat()
+            };
 
-    let mut dest = dest_result.map_err(|why| DownloadError::File {
-        item: item.get_name().to_owned(),
-        why,
-    })?;
+            PathBuf::from(
+                [ "repo/pool", branch, &dst, &name[0..1], "/", name, "/", &filename ].concat()
+            )
+        };
 
-    let mut response = client
-        .get(item.get_url())
-        .send()
-        .map_err(|why| DownloadError::Request {
-            item: item.get_name().to_owned(),
-            why,
-        })?;
+        let checksum = file_item.checksum.as_ref().map(|x| x.as_str());
+        downloaded += misc::download_file(client, &file_item.url, checksum, &destination)?;
+    }
 
-    let downloaded = response
-        .copy_to(&mut dest)
-        .map_err(|why| DownloadError::Request {
-            item: item.get_name().to_owned(),
-            why,
-        })?;
-
-    validate(item, &destination).map(|_| DownloadResult::Downloaded(downloaded))
-}
-
-fn validate(item: &Direct, dst: &Path) -> Result<(), DownloadError> {
-    File::open(dst)
-        .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why})
-        .and_then(|file| {
-            item.checksum.as_ref().map_or(Ok(()), |checksum| {
-                let digest = sha2_256_digest(file)
-                    .map_err(|why| DownloadError::File { item: item.get_name().to_owned(), why })?;
-                if &digest == checksum {
-                    Ok(())
-                } else {
-                    Err(DownloadError::InvalidChecksum {
-                        expected: checksum.to_owned(),
-                        received: digest
-                    })
-                }
-            })
-        })
-}
-
-/// Compares the length reported by the requested header to the length of existing file.
-fn check_length(response: &Response, compared: u64) -> bool {
-    response
-        .headers()
-        .get::<ContentLength>()
-        .map(|len| **len)
-        .unwrap_or(0) == compared
+    info!("finished downloading {}", &item.name);
+    Ok(DownloadResult::Downloaded(downloaded))
 }
 
 /// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct], branch: &str) -> Vec<Result<DownloadResult, DownloadError>> {
+pub fn parallel(items: &[Direct], branch: &str) -> Vec<io::Result<DownloadResult>> {
     let client = Client::new();
     items
         .par_iter()

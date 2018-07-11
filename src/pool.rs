@@ -1,5 +1,6 @@
 use std::{io, fs};
 use std::path::{Path, PathBuf};
+use misc;
 
 pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str, keep_source: bool) -> io::Result<()> {
     pool(path.as_ref(), archive, |src, dst| if keep_source || !is_source(src) {
@@ -42,8 +43,7 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, actio
                     package = &package[..package.len() - 7];
                 }
 
-                let mut arch = &filestem[filestem.rfind('_').unwrap_or(0) + 1..];
-                arch = arch.find('-').map_or(arch, |pos| &arch[..pos]);
+                let arch = misc::get_arch_from_stem(filestem);
 
                 PathBuf::from(
                     ["repo/pool/", archive, "/main/binary-", arch, "/", &package[0..1], "/", package].concat(),

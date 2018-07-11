@@ -29,7 +29,6 @@ mod extract;
 pub mod misc;
 pub mod pool;
 mod sources;
-mod update;
 
 use clap::{Arg, App, SubCommand};
 use cli::Action;
@@ -40,7 +39,6 @@ use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use update::update_packages;
 use reqwest::Client;
 use sources::build::build;
 
@@ -121,9 +119,8 @@ fn main() {
                     exit(1);
                 }
             },
-            Action::UpdatePackages => if let Err(why) = update_packages(&mut sources) {
-                error!("failed to update config: {}", why);
-                exit(1);
+            Action::UpdatePackages => {
+                unimplemented!()
             },
             Action::ConfigHelp => {
                 let _ = app.print_help();

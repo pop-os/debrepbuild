@@ -64,19 +64,30 @@ pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
         })
 }
 
-pub fn download_file(client: &Client, url: &str, path: &Path, checksum: &str) -> io::Result<u64> {
+pub fn download_file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> io::Result<u64> {
     let mut file = if path.exists() {
-        let digest = sha2_256_digest(File::open(path)?)?;
-        if &digest == checksum {
-            return Ok(0);
+        if let Some(checksum) = checksum {
+            let digest = sha2_256_digest(File::open(path)?)?;
+            if &digest == checksum {
+                info!("{} is already downloaded", path.display());
+                return Ok(0);
+            }
         }
 
-        File::open(path)?
+        fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)?
     } else {
-
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
         File::create(path)?
     };
 
+    info!("downloading file from {} to {}", url, path.display());
     let downloaded = client
         .get(url)
         .send()
@@ -85,13 +96,17 @@ pub fn download_file(client: &Client, url: &str, path: &Path, checksum: &str) ->
         .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest copy failed: {}", why)))?;
 
     let digest = sha2_256_digest(File::open(path)?)?;
-    if &digest == checksum {
-        Ok(downloaded)
+    if let Some(checksum) = checksum {
+        if &digest == checksum {
+            Ok(downloaded)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("checksum does not match for {}", path.display())
+            ))
+        }
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("checksum does not match for {}", path.display())
-        ))
+        Ok(downloaded)
     }
 }
 
@@ -110,6 +125,11 @@ pub fn sha2_256_digest(file: File) -> io::Result<String> {
     }
 
     Ok(format!("{:x}", hasher.result()))
+}
+
+pub fn get_arch_from_stem(stem: &str) -> &str {
+    let arch = &stem[stem.rfind('_').unwrap_or(0) + 1..];
+    arch.find('-').map_or(arch, |pos| &arch[..pos])
 }
 
 // NOTE: The following functions are implemented within Rust's standard in 1.26.0
