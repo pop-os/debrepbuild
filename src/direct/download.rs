@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use config::Direct;
 use misc;
+use url::UrlTokenizer;
 
 /// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
@@ -22,9 +23,17 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
 
     let mut downloaded = 0;
     for file_item in &item.urls {
+        let name: &str = file_item.name.as_ref().map_or(&item.name, |x| &x);
+        let url = UrlTokenizer::finalize(&file_item.url, name, &item.version)
+            .map_err(|text|
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unsupported variable: {}", text)
+                )
+            )?;
+
         let destination = {
-            let name: &str = file_item.name.as_ref().map_or(&item.name, |x| &x);
-            let file = &file_item.url[file_item.url.rfind('/').unwrap_or(0) + 1..];
+            let file = &url[url.rfind('/').unwrap_or(0) + 1..];
 
             let ext_pos = {
                 let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;

@@ -28,6 +28,7 @@ mod direct;
 mod extract;
 pub mod misc;
 pub mod pool;
+mod url;
 mod sources;
 
 use clap::{Arg, App, SubCommand};
