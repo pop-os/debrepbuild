@@ -43,7 +43,7 @@ pub fn untar(path: &Path, dst: &Path) -> io::Result<()> {
 
     fs::create_dir_all(dst)
         .and_then(|_| Command::new("tar")
-            .arg("-xvf")
+            .arg("-xf")
             .arg(path)
             .arg("-C")
             .arg(dst)
