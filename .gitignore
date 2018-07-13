@@ -2,3 +2,5 @@
 **/*.rs.bk
 /examples/repo
 /examples/sources
+.cargo
+vendor

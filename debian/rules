@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+export RUSTFLAGS=-g
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	make clean
+	make vendor
+
+override_dh_auto_install:
+	dh_auto_install -- PREFIX=/usr

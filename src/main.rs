@@ -31,7 +31,7 @@ pub mod pool;
 mod url;
 mod sources;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App, AppSettings, SubCommand};
 use cli::Action;
 use config::{Config, ConfigFetch};
 use direct::download::DownloadResult;
@@ -71,10 +71,13 @@ fn main() {
     setup_logger().unwrap();
     let version = format!("{} ({})", crate_version!(), short_sha());
 
-    let mut app = App::new("Debian Repository Builder")
+    let matches = App::new("Debian Repository Builder")
         .about("Creates and maintains debian repositories")
         .author(crate_authors!())
         .version(version.as_str())
+        .global_setting(AppSettings::ColoredHelp)
+        .global_setting(AppSettings::UnifiedHelpMessage)
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
             SubCommand::with_name("build")
                 .about("Builds a new repo, or updates an existing one")
@@ -91,12 +94,10 @@ fn main() {
         ).subcommand(
             SubCommand::with_name("update")
                 .about("Updates direct download-based packages in the configuration")
-        );
-
-    let matches = app.clone().get_matches();
+        ).get_matches();
 
     match config::parse() {
-        Ok(mut sources) => match cli::requested_action(&matches) {
+        Ok(mut sources) => match Action::new(&matches) {
             Action::Build(package, force) => update_package(&sources, package, force),
             Action::UpdateRepository => update_repository(&sources),
             Action::Fetch(key) => match sources.fetch(&key) {
@@ -123,10 +124,6 @@ fn main() {
             Action::UpdatePackages => {
                 unimplemented!()
             },
-            Action::ConfigHelp => {
-                let _ = app.print_help();
-                exit(1);
-            }
         },
         Err(why) => {
             error!("configuration parsing error: {}", why);

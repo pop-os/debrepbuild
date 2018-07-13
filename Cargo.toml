@@ -1,6 +1,10 @@
 [package]
 name = "debrepobuilder"
 version = "0.1.0"
+description = "Build and maintain Debian repositories with a TOML config"
+license-file = "LICENSE"
+readme = "README.md"
+repository = "https://github.com/pop-os/debrepbuild"
 authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
 
 [[bin]]

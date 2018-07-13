@@ -2,14 +2,14 @@ archive = "bionic"
 version = "18.04"
 origin = "system76"
 label = "System76"
-email = "info@system76.com"
+email = "michael@system76.com"
 
 [[direct]]
 name = "atom-editor"
 version = "1.28.1"
 
     [[direct.urls]]
-    url = "https://github.com/atom/atom/releases/download/v1.28.1/atom-amd64.deb"
+    url = "https://github.com/atom/atom/releases/download/v${version}/atom-amd64.deb"
     checksum = "9d567ce28792640d9a2446b1f5992bc04b4cf4c92b459bd2c92016c2f4b2f00e"
     arch = "amd64"
 
@@ -18,17 +18,17 @@ name = "mattermost-desktop"
 version = "4.1.2"
 
     [[direct.urls]]
-    url = "https://releases.mattermost.com/desktop/4.1.2/mattermost-desktop-4.1.2-linux-amd64.deb"
+    url = "https://releases.mattermost.com/desktop/${version}/${name}-${version}-linux-amd64.deb"
     checksum = "9c53abf8b2e50d9eae02cb1cbebe0e006091388c7ce49d26f95b93e2a7df6ffb"
     arch = "amd64"
 
 [[direct]]
 name = "slack-desktop"
-version = "3.1.1"
+version = "3.2.1"
 
     [[direct.urls]]
-    url = "https://downloads.slack-edge.com/linux_releases/slack-desktop-3.1.1-amd64.deb"
-    checksum = "a966e446d3e5a5ab2373fcd29afddd720cdfe47438009d1086ee532fab884c37"
+    url = "https://downloads.slack-edge.com/linux_releases/${name}-${version}-amd64.deb"
+    checksum = "503995fe48cdb435a479669971e2a7ea7223428adc3c4f9fee94dbbdf9bcad24"
     arch = "amd64"
 
 [[direct]]
@@ -36,31 +36,31 @@ name = "spotify-client"
 version = "1.0.80.480.g51b03ac3-13"
 
     [[direct.urls]]
-    url = "http://repository.spotify.com/pool/non-free/s/spotify-client/spotify-client_1.0.80.480.g51b03ac3-13_amd64.deb"
+    url = "http://repository.spotify.com/pool/non-free/s/${name}/${name}_${version}_amd64.deb"
     checksum = "e32f4816ae79dbfa0c14086e76df3bc83d526402aac1dbba534127fc00fe50ea"
 
 [[direct]]
 name = "code"
-version = "1.22.2-1523551015"
+version = "1.25.1-1531323788"
 
     [[direct.urls]]
-    url = "https://az764295.vo.msecnd.net/stable/3aeede733d9a3098f7b4bdc1f66b63b0f48c1ef9/code_1.22.2-1523551015_amd64.deb"
-    checksum = "421ab814a82ec205ccca1a31150f2f9a437a2311417a2810fb62e599a40c754c"
+    url = "https://az764295.vo.msecnd.net/stable/1dfc5e557209371715f655691b1235b6b26a06be/code_1.25.1-1531323788_amd64.deb"
+    checksum = "df7785f4b267407cbd3d58c3e4e210edbbee744fcf0bb5ae12bc4f8f4d796351"
 
 [[direct]]
 name = "peek"
 version = "1.3.1-0~ppa23~ubuntu18.04.1"
 
     [[direct.urls]]
-    url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/peek_1.3.1-0~ppa23~ubuntu18.04.1_amd64.deb"
+    url = "http://ppa.launchpad.net/${name}-developers/stable/ubuntu/pool/main/p/${name}/${name}_${version}_amd64.deb"
     checksum = "5119d80a95486694df408f0c99fc9e0f8ced5cf407814b1b34cc533b4517bd29"
 
     [[direct.urls]]
-    url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/peek_1.3.1-0~ppa23~ubuntu18.04.1.tar.xz"
+    url = "http://ppa.launchpad.net/${name}-developers/stable/ubuntu/pool/main/p/${name}/${name}_${version}.tar.xz"
     checksum = "2c9a2bc768788e40daccf91c6e26366cc457147836a78f22d656cc09ec042a31"
 
     [[direct.urls]]
-    url = "http://ppa.launchpad.net/peek-developers/stable/ubuntu/pool/main/p/peek/peek_1.3.1-0~ppa23~ubuntu18.04.1.dsc"
+    url = "http://ppa.launchpad.net/${name}-developers/stable/ubuntu/pool/main/p/${name}/${name}_${version}.dsc"
     checksum = "9cf437d5fd4bee173ee3fdece8529c1503f7ad91011b9137ceefe6df7e4e373a"
 
 [[direct]]
@@ -68,7 +68,7 @@ name = "signal-desktop"
 version = "1.13.0"
 
     [[direct.urls]]
-    url = "https://updates.signal.org/desktop/apt/pool/main/s/signal-desktop/signal-desktop_1.13.0_amd64.deb"
+    url = "https://updates.signal.org/desktop/apt/pool/main/s/${name}/${name}_${version}_amd64.deb"
     checksum = "eea6cde5762c4c73f7e1b4bbbc16e3cf5cce4047f1b0f8f46472698ddd9c57c5"
 
 [[direct]]
@@ -76,32 +76,32 @@ name = "google-chrome-stable"
 version = "current"
 
     [[direct.urls]]
-    url = "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+    url = "https://dl.google.com/linux/direct/${name}_${version}_amd64.deb"
 
 [[direct]]
 name = "steam"
-version = "1.0.0.54"
+version = "1.0.0.54+repack-5ubuntu1"
 
     [[direct.urls]]
-    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam_1.0.0.54+repack-5ubuntu1_i386.deb"
+    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/${name}_${version}_i386.deb"
     checksum = "a3436f5dced446fb98f14db559017e55de6c3da12dd60cf5a33d689ea6c39a34"
 
     [[direct.urls]]
     name = "steam-installer"
-    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-installer_1.0.0.54+repack-5ubuntu1_all.deb"
+    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/${name}_${version}_all.deb"
     checksum = "907d60e8983dc49f2a33dfd092b36790f3320fe2102c4afddb0810ec042e75c0"
 
     [[direct.urls]]
     name = "steam-devices"
-    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/steam-devices_1.0.0.54+repack-5ubuntu1_all.deb"
+    url = "http://us.archive.ubuntu.com/ubuntu/pool/multiverse/s/steam/${name}_${version}_all.deb"
     checksum = "0c1aad76aaf0e4c6c9e4a151342be4d5499387e4e6597c3a9ea8878b3f787cba"
 
 [[direct]]
 name = "android-studio"
-version = "173.4819257"
+version = "173.4819257~bionic"
 
     [[direct.urls]]
-    url = "http://ppa.launchpad.net/maarten-fonville/android-studio/ubuntu/pool/main/a/android-studio/android-studio_173.4819257~bionic_amd64.deb"
+    url = "http://ppa.launchpad.net/maarten-fonville/${name}/ubuntu/pool/main/a/${name}/${name}_${version}_amd64.deb"
     checksum = "4e06b6971544a12d6cb7e122411e15feb2ee66793d13a94c18cac78d56a55558"
 
 [[direct]]
@@ -109,5 +109,5 @@ name = "gitkraken"
 version = "current"
 
     [[direct.urls]]
-    url = "https://release.gitkraken.com/linux/gitkraken-amd64.deb"
+    url = "https://release.gitkraken.com/linux/${name}-amd64.deb"
     arch = "amd64"

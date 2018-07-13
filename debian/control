@@ -1,0 +1,18 @@
+Source: debrepobuilder
+Section: admin
+Priority: optional
+Maintainer: Michael Murphy <michael@system76.com>
+Build-Depends:
+  debhelper (>=9),
+  cargo,
+  libssl-dev,
+Standards-Version: 4.1.4
+Homepage: https://github.com/pop-os/debrepbuild
+
+Package: debrepobuilder
+Architecture: amd64
+Depends:
+  openssl,
+  ${misc:Depends},
+  ${shlib:Depends}
+Description: Generate and maintain Debian repositories from a TOML spec

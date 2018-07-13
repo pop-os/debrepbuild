@@ -66,7 +66,7 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
         };
 
         let checksum = file_item.checksum.as_ref().map(|x| x.as_str());
-        downloaded += misc::download_file(client, &file_item.url, checksum, &destination)?;
+        downloaded += misc::download_file(client, &url, checksum, &destination)?;
     }
 
     info!("finished downloading {}", &item.name);
