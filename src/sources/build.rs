@@ -11,6 +11,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use subprocess::{Exec, Redirection};
 use walkdir::WalkDir;
 
 fn fetch_assets(
@@ -79,37 +80,11 @@ pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(),
 
     let _ = env::set_current_dir("build");
 
-    if let Some(ref prebuild) = item.prebuild {
-        for command in prebuild {
-            let exit_status = Command::new("sh")
-                .args(&["-c", command])
-                .status()
-                .map_err(|why| SourceError::BuildCommand { why })?;
-
-            if !exit_status.success() {
-                return Err(SourceError::BuildFailed);
-            }
-        }
-    }
-
-    let packages: Vec<String> = match item.depends {
-        Some(ref depends) => {
-            let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()))
-                .flat_map(|deb| misc::match_deb(&deb, depends))
-                .collect::<Vec<(String, usize)>>();
-
-            temp.sort_by(|a, b| a.1.cmp(&b.1));
-            temp.into_iter().map(|x| x.0).collect::<Vec<String>>()
-        }
-        None => Vec::new()
-    };
-
     pre_flight(
+        item,
+        &pwd,
         branch,
-        &item.name,
         &project_directory,
-        item.build_on.as_ref().map(|x| x.as_str()),
-        &packages,
         force,
     )?;
 
@@ -132,13 +107,14 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
 }
 
 fn pre_flight(
+    item: &Source,
+    pwd: &Path,
     branch: &str,
-    name: &str,
     dir: &Path,
-    build_on: Option<&str>,
-    packages: &[String],
     force: bool
 ) -> Result<(), SourceError> {
+    let name = &item.name;
+    let build_on = item.build_on.as_ref().map(|x| x.as_str());
     let record_path = PathBuf::from(["../record/", &name].concat());
 
     enum Record {
@@ -214,7 +190,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(branch, dir, packages)?;
+    sbuild(item, &pwd, branch, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -235,21 +211,66 @@ fn pre_flight(
     result.map_err(|why| SourceError::RecordUpdate { why })
 }
 
-fn sbuild<P: AsRef<Path>>(branch: &str, path: P, extra_packages: &[String]) -> Result<(), SourceError> {
-    let mut command = Command::new("sbuild");
-    for p in extra_packages {
-        command.arg(&["--extra-package=", p].concat());
+fn sbuild<P: AsRef<Path>>(
+    item: &Source,
+    pwd: &Path,
+    branch: &str,
+    path: P,
+) -> Result<(), SourceError> {
+    let stdout_file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(pwd.join(["logs/", &item.name, "-stdout"].concat()))
+        .map_err(|why| SourceError::BuildCommand { why })?;
+
+    let stderr_file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(pwd.join(["logs/", &item.name, "-stderr"].concat()))
+        .map_err(|why| SourceError::BuildCommand { why })?;
+
+    let mut command = Exec::cmd("sbuild")
+        .stdout(Redirection::File(stdout_file))
+        .stderr(Redirection::File(stderr_file));
+
+    if let Some(ref depends) = item.depends {
+        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()))
+            .flat_map(|deb| misc::match_deb(&deb, depends))
+            .collect::<Vec<(String, usize)>>();
+
+        temp.sort_by(|a, b| a.1.cmp(&b.1));
+        for &(ref p, _) in &temp {
+            command = command.arg(&["--extra-package=", &p].concat());
+        }
     }
-    command.arg("-d");
-    command.arg(branch);
-    command.arg(path.as_ref());
+
+    if let Some(commands) = item.prebuild.as_ref() {
+        for cmd in commands {
+            command = command.arg(&["--pre-build-commands=", &cmd].concat());
+        }
+    }
+
+    if let Some(commands) = item.starting_build.as_ref() {
+        for cmd in commands {
+            command = command.arg(&["--starting-build-commands=", &cmd].concat());
+        }
+    }
+
+    command = command.arg("-d");
+    command = command.arg(branch);
+    command = command.arg(path.as_ref());
 
     debug!("executing {:?}", command);
 
-    let exit_status = command
-        .status()
-        .map_err(|why| SourceError::BuildCommand { why })?;
-
+    let exit_status = command.join()
+        .map_err(|why| SourceError::BuildCommand {
+            why: io::Error::new(
+                io::ErrorKind::Other,
+                format!("{:?}", why)
+            )
+        })?;
     if exit_status.success() {
         info!("build succeeded!");
         Ok(())

@@ -8,6 +8,7 @@ extern crate reqwest;
 extern crate select;
 extern crate serde;
 extern crate sha2;
+extern crate subprocess;
 extern crate toml;
 extern crate walkdir;
 extern crate xz2;
@@ -121,9 +122,6 @@ fn main() {
                     exit(1);
                 }
             },
-            Action::UpdatePackages => {
-                unimplemented!()
-            },
         },
         Err(why) => {
             error!("configuration parsing error: {}", why);
@@ -175,7 +173,7 @@ fn update_package(sources: &Config, package: &str, force: bool) {
 
 /// Creates or updates a Debian software repository from a given config
 fn update_repository(sources: &Config) {
-    let dirs_result = [SHARED_ASSETS, PACKAGE_ASSETS, "build", "record", "sources"].iter()
+    let dirs_result = [SHARED_ASSETS, PACKAGE_ASSETS, "build", "record", "sources", "logs"].iter()
         .map(|dir| if Path::new(dir).exists() { Ok(()) } else { fs::create_dir_all(dir) })
         .collect::<io::Result<()>>();
 

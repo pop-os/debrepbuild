@@ -11,7 +11,7 @@ pub enum Action<'a> {
 }
 
 impl<'a> Action<'a> {
-    fn new(matches: &'a ArgMatches) -> Action<'a> {
+    pub fn new(matches: &'a ArgMatches) -> Action<'a> {
         match matches.subcommand() {
             ("build", Some(build)) => match build.value_of("package") {
                 Some(pkg) => Action::Build(pkg, build.is_present("force")),

@@ -25,17 +25,16 @@ pub enum SourceLocation {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
-    pub name:      String,
-    pub location:  Option<SourceLocation>,
-    pub assets:    Option<Vec<SourceAsset>>,
-    pub prebuild:  Option<Vec<String>>,
-    pub build_on:  Option<String>,
+    pub name:           String,
+    pub location:       Option<SourceLocation>,
+    pub assets:         Option<Vec<SourceAsset>>,
+    pub starting_build: Option<Vec<String>>,
+    pub prebuild:       Option<Vec<String>>,
+    pub build_on:       Option<String>,
     #[serde(default = "default_build_source")]
-    pub keep_source: bool,
-    pub debian:    Option<DebianPath>,
-    pub depends:   Option<Vec<String>>,
-    #[serde(default)]
-    pub priority:  usize,
+    pub keep_source:    bool,
+    pub debian:         Option<DebianPath>,
+    pub depends:        Option<Vec<String>>,
 }
 
 fn default_build_source() -> bool { true }
