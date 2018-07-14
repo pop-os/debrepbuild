@@ -31,6 +31,7 @@ log = { version = "0.4.3" }
 sha2 = "0.7.1"
 fern = "0.5.6"
 subprocess = "0.1.13"
+itertools = "0.7.8"
 
 [build-dependencies]
 vergen = "0.1.1"

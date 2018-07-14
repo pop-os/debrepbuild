@@ -1,11 +1,22 @@
-use super::SourceError;
 use std::borrow::Cow;
-use std::fs;
+use std::{fs, io};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use misc::unlink;
 
 pub struct LinkedArtifact(PathBuf);
+
+pub struct LinkError {
+    pub src: PathBuf,
+    pub dst: PathBuf,
+    pub why: io::Error
+}
+
+impl LinkError {
+    pub fn new(src: &Path, dst: &Path, why: io::Error) -> LinkError {
+        LinkError { src: src.to_path_buf(), dst: dst.to_path_buf(), why }
+    }
+}
 
 impl Drop for LinkedArtifact {
     fn drop(&mut self) {
@@ -13,7 +24,7 @@ impl Drop for LinkedArtifact {
     }
 }
 
-pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceError> {
+pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, LinkError> {
     let dst = resolve_destination(src, dst);
 
     if let Some(dst_ino) = dst.as_ref().metadata().ok().map(|m| m.ino()) {
@@ -29,7 +40,7 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
                 return Ok(LinkedArtifact(dst.to_owned().to_path_buf()));
             } else {
                 info!("removing link at {}", dst.display());
-                unlink(&dst).map_err(|why| SourceError::LinkRemoval { why })?;
+                unlink(&dst).map_err(|why| LinkError::new(src, &dst, why))?;
             }
         }
     }
@@ -37,7 +48,7 @@ pub fn link_artifact(src: &Path, dst: &Path) -> Result<LinkedArtifact, SourceErr
     info!("linking {} to {}", src.display(), dst.display());
     fs::hard_link(src, &dst)
         .map(|_| LinkedArtifact(dst.to_owned().to_path_buf()))
-        .map_err(|why| SourceError::Link { why })
+        .map_err(|why| LinkError::new(src, &dst, why))
 }
 
 fn resolve_destination<'a>(mut src: &'a Path, dst: &'a Path) -> Cow<'a, Path> {

@@ -5,12 +5,12 @@ use std::path::PathBuf;
 
 use config::Direct;
 use misc;
-use url::UrlTokenizer;
+use super::request;
+use super::url::UrlTokenizer;
 
 /// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
-    Downloaded(u64),
-    AlreadyExists,
+    Downloaded(u64)
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
@@ -66,7 +66,7 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
         };
 
         let checksum = file_item.checksum.as_ref().map(|x| x.as_str());
-        downloaded += misc::download_file(client, &url, checksum, &destination)?;
+        downloaded += request::file(client, &url, checksum, &destination)?;
     }
 
     info!("finished downloading {}", &item.name);

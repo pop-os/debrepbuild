@@ -2,7 +2,7 @@ use std::{fs, io};
 use std::path::Path;
 use std::process::Command;
 
-pub fn extract(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn extract(src: &Path, dst: &Path) -> io::Result<()>  {
     match src.file_name().and_then(|x| x.to_str()) {
         Some(filename) => {
             if filename.ends_with(".zip") {
@@ -17,7 +17,7 @@ pub fn extract(src: &Path, dst: &Path) -> io::Result<()> {
     }
 }
 
-pub fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
+fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
     if dst.exists() {
         fs::remove_dir_all(dst)?;
     }
@@ -36,7 +36,7 @@ pub fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
         )
 }
 
-pub fn untar(path: &Path, dst: &Path) -> io::Result<()> {
+fn untar(path: &Path, dst: &Path) -> io::Result<()> {
     if dst.exists() {
         fs::remove_dir_all(dst)?;
     }

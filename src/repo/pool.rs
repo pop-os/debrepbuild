@@ -10,10 +10,6 @@ pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str, keep_source: bool) -> 
     })
 }
 
-pub fn cp_to_pool<P: AsRef<Path>>(path: P, archive: &str) -> io::Result<()> {
-    pool(path.as_ref(), archive, |src, dst| fs::copy(src, dst).map(|_| ()))
-}
-
 fn is_source(src: &Path) -> bool {
     let path = src.to_str().unwrap();
     path.ends_with(".dsc") || path.ends_with(".tar.gz") || path.ends_with(".tar.xz")

@@ -1,13 +1,10 @@
 use std::ffi::CString;
-use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::fs::File;
+use std::io::{self, Read, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
-use std::process::Command;
-use reqwest::Client;
 
 use libc;
-use sha2::{Sha256, Digest};
 use walkdir::{DirEntry, WalkDir};
 
 pub fn walk_debs(path: &Path) -> Box<Iterator<Item = DirEntry>> {
@@ -43,88 +40,6 @@ pub fn unlink(link: &Path) -> io::Result<()> {
             0 => Ok(()),
             _ => Err(io::Error::last_os_error())
         })
-}
-
-pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
-    info!("rsyncing {} to {}", src.display(), dst.display());
-
-    if src.is_dir() {
-        fs::create_dir_all(src)?;
-    }
-
-    Command::new("rsync")
-        .arg("-avz")
-        .arg(src)
-        .arg(dst)
-        .status()
-        .and_then(|x| if x.success() {
-            Ok(())
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
-        })
-}
-
-pub fn download_file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> io::Result<u64> {
-    let mut file = if path.exists() {
-        if let Some(checksum) = checksum {
-            let digest = sha2_256_digest(File::open(path)?)?;
-            if &digest == checksum {
-                info!("{} is already downloaded", path.display());
-                return Ok(0);
-            }
-        }
-
-        fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(path)?
-    } else {
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
-        }
-        File::create(path)?
-    };
-
-    info!("downloading file from {} to {}", url, path.display());
-    let downloaded = client
-        .get(url)
-        .send()
-        .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest get failed: {}", why)))?
-        .copy_to(&mut file)
-        .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest copy failed: {}", why)))?;
-
-    let digest = sha2_256_digest(File::open(path)?)?;
-    if let Some(checksum) = checksum {
-        if &digest == checksum {
-            Ok(downloaded)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("checksum does not match for {}", path.display())
-            ))
-        }
-    } else {
-        Ok(downloaded)
-    }
-}
-
-pub fn sha2_256_digest(file: File) -> io::Result<String> {
-    let mut hasher = Sha256::default();
-    let data = &mut BufReader::new(file);
-    loop {
-        let read = {
-            let buffer = data.fill_buf()?;
-            if buffer.len() == 0 { break }
-            hasher.input(buffer);
-            buffer.len()
-        };
-
-        data.consume(read);
-    }
-
-    Ok(format!("{:x}", hasher.result()))
 }
 
 pub fn get_arch_from_stem(stem: &str) -> &str {
