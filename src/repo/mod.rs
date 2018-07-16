@@ -3,6 +3,7 @@ mod build;
 mod generate;
 mod pool;
 mod prepare;
+mod version;
 
 use std::{env, fs, io};
 use std::path::PathBuf;
@@ -23,6 +24,11 @@ impl<'a> Repo<'a> {
     pub fn prepare(config: Config, packages: Packages<'a>) -> Repo<'a> {
         if let Err(why) = prepare::create_missing_directories() {
             error!("unable to create directories in current directory: {}", why);
+            exit(1);
+        }
+
+        if let Err(why) = prepare::package_cleanup(&config) {
+            error!("failed to clean up file: {}", why);
             exit(1);
         }
 

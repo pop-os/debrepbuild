@@ -1,11 +1,10 @@
 mod artifacts;
 mod extract;
 mod rsync;
-mod version;
 
 use super::super::SHARED_ASSETS;
 use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
-use self::version::{changelog, git};
+use super::version::{changelog, git};
 use self::rsync::rsync;
 use config::{Config, DebianPath, Source, SourceLocation};
 use glob::glob;
@@ -72,6 +71,8 @@ pub enum BuildError {
     GitCommit { package: String, why: io::Error },
     #[fail(display = "failed to link {:?} to {:?}: {}", src, dst, why)]
     Link { src: PathBuf, dst: PathBuf, why: io::Error },
+    #[fail(display = "no version listed in changelog for {}", package)]
+    NoChangelogVersion { package: String },
     #[fail(display = "failed to open file at {:?}: {}", file, why)]
     Open { file: PathBuf, why: io::Error },
     #[fail(display = "failed to move {} to pool: {}", package, why)]
@@ -222,10 +223,13 @@ fn pre_flight(
 
     let record = match build_on {
         Some("changelog") => {
-            let version = changelog(dir).map_err(|why| BuildError::Changelog {
-                package: item.name.clone(),
-                why
-            })?;
+            let version = changelog(&dir.join("debian/changelog"), 1)
+                .map_err(|why| BuildError::Changelog {
+                    package: item.name.clone(),
+                    why
+                }).and_then(|x| x.into_iter().next().ok_or_else(|| BuildError::NoChangelogVersion {
+                    package: item.name.clone(),
+                }))?;
 
             if !force && record_path.exists() {
                 let record = misc::read_to_string(&record_path)

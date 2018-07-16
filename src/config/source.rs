@@ -35,6 +35,9 @@ pub struct Source {
     pub keep_source:    bool,
     pub debian:         Option<DebianPath>,
     pub depends:        Option<Vec<String>>,
+    #[serde(default = "default_retain")]
+    pub retain:         usize
 }
 
 fn default_build_source() -> bool { true }
+fn default_retain() -> usize { 3 }
