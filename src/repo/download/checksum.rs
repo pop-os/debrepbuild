@@ -9,7 +9,7 @@ pub fn sha2_256_digest(file: File) -> io::Result<String> {
     loop {
         let read = {
             let buffer = data.fill_buf()?;
-            if buffer.len() == 0 { break }
+            if buffer.is_empty() { break }
             hasher.input(buffer);
             buffer.len()
         };

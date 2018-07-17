@@ -31,7 +31,7 @@ impl<'a> UrlTokenizer<'a> {
         }
 
         output.shrink_to_fit();
-        return Ok(output);
+        Ok(output)
     }
 }
 
@@ -60,19 +60,17 @@ impl<'a> Iterator for UrlTokenizer<'a> {
                 } else {
                     self.read += 1;
                 }
-            } else {
-                if &bytes[self.read..self.read + 2][..] == b"${" {
-                    let token = &self.data[start..self.read];
-                    self.flags = FOUND;
-                    self.read += 2;
-                    if token.len() > 0 {
-                        return Some(UrlToken::Normal(token));
-                    } else {
-                        start = self.read;
-                    }
+            } else if &bytes[self.read..self.read + 2][..] == b"${" {
+                let token = &self.data[start..self.read];
+                self.flags = FOUND;
+                self.read += 2;
+                if !token.is_empty() {
+                    return Some(UrlToken::Normal(token));
                 } else {
-                    self.read += 1;
+                    start = self.read;
                 }
+            } else {
+                self.read += 1;
             }
         }
 

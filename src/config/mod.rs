@@ -57,6 +57,26 @@ impl Config {
                     .map_err(|why| ParsingError::FileWrite { file: SOURCES, why })
             })
     }
+
+    pub fn direct_exists(&self, filename: &str) -> bool {
+        self.direct.as_ref()
+            .map_or(false, |packages| {
+                packages.iter().any(|package| {
+                    package.name == filename
+                        || package.urls.iter()
+                            .any(|x| x.name.as_ref().map_or(false, |x| x == filename))
+                })
+            })
+    }
+
+    pub fn source_exists(&self, filename: &str) -> bool {
+        self.source.as_ref()
+            .map_or(false, |x| x.iter().any(|x| x.name == filename))
+    }
+
+    pub fn package_exists(&self, filename: &str) -> bool {
+        self.direct_exists(filename) || self.source_exists(filename)
+    }
 }
 
 /// Methods for fetching and updating values from the in-memory representation of the TOML spec.

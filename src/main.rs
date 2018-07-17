@@ -117,7 +117,7 @@ fn main() {
                 },
                 Action::Clean => {
                     Repo::prepare(sources, Packages::All).clean();
-                }
+                },
                 Action::Dist => {
                     Repo::prepare(sources, Packages::All).generate();
                 },
@@ -140,7 +140,7 @@ fn main() {
                 },
                 Action::Remove(packages) => {
                     Repo::prepare(sources, Packages::Select(&packages, false)).remove();
-                }
+                },
                 Action::Update(key, value) => match sources.update(key, value.to_owned()) {
                     Ok(()) => match sources.write_to_disk() {
                         Ok(()) => info!("successfully wrote config changes to disk"),

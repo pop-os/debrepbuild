@@ -38,9 +38,8 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
             let ext_pos = {
                 let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
                 match &file[ext_pos..] {
-                    "gz" | "xz" => match &file[ext_pos - 4..ext_pos - 1] {
-                        "tar" => ext_pos = ext_pos - 4,
-                        _ => ()
+                    "gz" | "xz" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
+                        ext_pos -= 4;
                     }
                     _ => ()
                 }

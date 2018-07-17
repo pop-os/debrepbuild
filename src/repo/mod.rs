@@ -27,16 +27,15 @@ impl<'a> Repo<'a> {
             exit(1);
         }
 
-        if let Err(why) = prepare::package_cleanup(&config) {
-            error!("failed to clean up file: {}", why);
-            exit(1);
-        }
-
         Repo { config, packages }
     }
 
     pub fn clean(self) -> Self {
-        unimplemented!();
+        if let Err(why) = prepare::package_cleanup(&self.config) {
+            error!("failed to clean up file: {}", why);
+            exit(1);
+        }
+        self
     }
 
     pub fn download(self) -> Self {
@@ -69,7 +68,14 @@ impl<'a> Repo<'a> {
     }
 
     pub fn remove(self) -> Self {
-        unimplemented!();
+        if let Packages::Select(ref packages, _) = self.packages {
+            if let Err(why) = prepare::remove(packages, &self.config.archive) {
+                error!("failed to remove file: {}", why);
+                exit(1);
+            }
+        }
+
+        self
     }
 }
 

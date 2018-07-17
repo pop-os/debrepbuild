@@ -5,7 +5,7 @@ based on the directory hierarchy, and a TOML configuration file. Real world repo
 may be found bellow.
 
 - [System76 CUDA Repo](https://github.com/system76/cuda)
-- [Pop!\_OS Proprietary Repo](https://github.com/pop-os/debrepbuild/tree/master/examples)
+- [Pop!\_OS Proprietary Repo](https://github.com/pop-os/repo-proprietary)
 
 ## Directory Structure
 
@@ -70,7 +70,20 @@ repo/
 
 ### Create / update a Debian repository
 ```
-debrep build
+debrep build [ -f | --force ]
+debrep build packages <PACKAGES>... [ -f | --force ]
+debrep build pool
+debrep build dist
+```
+
+### Clean up old packages
+```
+debrep clean
+```
+
+### Remove packages
+```
+debrep remove <PACKAGES>...
 ```
 
 ### Pretty-print the sources.toml configuration
@@ -87,13 +100,4 @@ debrep config direct.atom-editor.version
 ```
 deprep config direct.atom-editor.version ${NEW_VERSION}
 deprep config direct.atom-editor.url ${NEW_URL}
-```
-
-### Automatically update configurations
-
-`direct` packages can be automatically updated if they have a `update`
-table specified.
-
-```
-debrep update
 ```

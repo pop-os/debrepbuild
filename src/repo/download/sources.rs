@@ -39,7 +39,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
                 why
             })?;
 
-        &digest != checksum
+        digest != checksum
     } else {
         true
     };
@@ -63,7 +63,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
             why
         })?;
 
-    if &digest == checksum {
+    if digest == checksum {
         Ok(())
     } else {
         Err(DownloadError::ChecksumInvalid {

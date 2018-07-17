@@ -8,7 +8,7 @@ pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> 
     let mut file = if path.exists() {
         if let Some(checksum) = checksum {
             let digest = sha2_256_digest(File::open(path)?)?;
-            if &digest == checksum {
+            if digest == checksum {
                 info!("{} is already downloaded", path.display());
                 return Ok(0);
             }
@@ -37,7 +37,7 @@ pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> 
 
     let digest = sha2_256_digest(File::open(path)?)?;
     if let Some(checksum) = checksum {
-        if &digest == checksum {
+        if digest == checksum {
             Ok(downloaded)
         } else {
             Err(io::Error::new(
