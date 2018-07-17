@@ -20,11 +20,11 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
                 if let Some("changelog") = source.build_on.as_ref().map(|x| x.as_str()) {
                     let cpath = PathBuf::from(["debian/", &source.name, "/changelog"].concat());
                     if cpath.exists() {
-                        let keep = changelog(&cpath, 0)?;
+                        let keep = changelog(&cpath, source.retain)?;
                         for (file, version) in locate_files(&source.name, &config.archive) {
-                            if keep.iter().any(|x| version.as_str() != x.as_str()) {
+                            if !keep.iter().any(|x| version.as_str() == x.as_str()) {
                                 let path = file.path();
-                                info!("cleaning up file at {:?}", path);
+                                info!("removing file at {:?}", path);
                                 fs::remove_file(path)?;
                             }
                         }
@@ -38,14 +38,16 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
 }
 
 fn locate_files(name: &str, archive: &str) -> Vec<(DirEntry, String)> {
-    let path = PathBuf::from(["pool/", archive, "/"].concat());
+    let path = PathBuf::from(["repo/pool/", archive, "/"].concat());
 
     fn matches(entry: &DirEntry, name: &str) -> bool {
         if entry.path().is_dir() {
-            false
+            true
         } else {
             entry.file_name().to_str().map_or(false, |e| {
-                e.split('_').next().map_or(false, |n| n == name)
+                e.split('_').next().map_or(false, |n| {
+                    n == name || (n.ends_with("-dbgsym") && &n[..n.len() - 7] == name)
+                })
             })
         }
     }
@@ -53,10 +55,20 @@ fn locate_files(name: &str, archive: &str) -> Vec<(DirEntry, String)> {
     WalkDir::new(path)
         .into_iter()
         .filter_entry(|e| matches(e, name))
-        .flat_map(|e| e.ok().and_then(|e| {
-            e.file_name()
-                .to_str()
-                .and_then(|e| e.split('_').nth(1).map(|v| v.to_owned()))
-                .map(|v| (e, v))
-        })).collect()
+        .flat_map(|e| e.ok().and_then(|e| if e.path().is_file() { Some(e) } else { None }))
+        .flat_map(|e| e.file_name()
+            .to_str()
+            .and_then(|e| e.split('_').nth(1).map(|v| get_version(v).to_owned()))
+            .map(|v| (e, v))
+        ).collect()
+}
+
+fn get_version(e: &str) -> &str {
+    for ext in &[".tar.gz", ".tar.xz", ".dsc"] {
+        if e.ends_with(ext) {
+            return &e[..e.len() - ext.len()];
+        }
+    }
+
+    e
 }

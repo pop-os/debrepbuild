@@ -35,6 +35,10 @@ impl<'a> Repo<'a> {
         Repo { config, packages }
     }
 
+    pub fn clean(self) -> Self {
+        unimplemented!();
+    }
+
     pub fn download(self) -> Self {
         match self.packages {
             Packages::All => download::all(&self.config),
@@ -62,6 +66,10 @@ impl<'a> Repo<'a> {
             error!("failed to generate dist files: {}", why);
             exit(1);
         }
+    }
+
+    pub fn remove(self) -> Self {
+        unimplemented!();
     }
 }
 
