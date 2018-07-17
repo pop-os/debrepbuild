@@ -43,6 +43,10 @@ pub fn unlink(link: &Path) -> io::Result<()> {
 }
 
 pub fn get_arch_from_stem(stem: &str) -> &str {
+    if let Some(arch) = ["amd64", "i386"].into_iter().find(|&x| stem.ends_with(x)) {
+        return arch;
+    }
+
     let arch = &stem[stem.rfind('_').unwrap_or(0) + 1..];
     arch.find('-').map_or(arch, |pos| &arch[..pos])
 }
