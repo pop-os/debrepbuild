@@ -15,7 +15,7 @@ pub enum DownloadResult {
 
 /// Given an item with a URL, download the item if the item does not already exist.
 pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<DownloadResult> {
-    info!("downloading package named {}", item.name);
+    info!("checking if {} needs to be downloaded", item.name);
 
     fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
         [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()

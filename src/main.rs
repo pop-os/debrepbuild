@@ -71,34 +71,55 @@ fn main() {
         .global_setting(AppSettings::ColoredHelp)
         .global_setting(AppSettings::UnifiedHelpMessage)
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(
-            SubCommand::with_name("build")
-                .about("Builds a new repo, or updates an existing one")
-                .arg(Arg::with_name("package").required(false))
+        .subcommand(SubCommand::with_name("build")
+            .about("Builds a new repo, or updates an existing one")
+            .alias("b")
+            .subcommand(SubCommand::with_name("packages")
+                .about("builds the specified packages")
+                .alias("pkg")
+                .arg(Arg::with_name("packages").multiple(true).required(true))
                 .arg(Arg::with_name("force")
                     .short("f")
                     .long("force")
+                    .group("action")
                     .help("forces the package to be built"))
-        ).subcommand(
-            SubCommand::with_name("config")
-                .about("Gets or sets fields within the repo config")
-                .arg(Arg::with_name("key").required(false))
-                .arg(Arg::with_name("value").required(false))
-        ).subcommand(
-            SubCommand::with_name("update")
-                .about("Updates direct download-based packages in the configuration")
+            )
+            .subcommand(SubCommand::with_name("pool")
+                .alias("p")
+                .about("only builds the pool"))
+            .subcommand(SubCommand::with_name("dist")
+                .alias("d")
+                .about("only builds the dist files"))
+        ).subcommand(SubCommand::with_name("clean")
+            .about("cleans excess packages from the repository")
+        ).subcommand(SubCommand::with_name("config")
+            .about("Gets or sets fields within the repo config")
+            .alias("c")
+            .arg(Arg::with_name("key").required(false))
+            .arg(Arg::with_name("value").required(false))
+        ).subcommand(SubCommand::with_name("remove")
+            .about("removes the specified packages from the repository")
+            .alias("r")
+            .arg(Arg::with_name("packages").multiple(true).required(true))
+        ).subcommand(SubCommand::with_name("update")
+            .about("Updates direct download-based packages in the configuration")
+            .alias("u")
         ).get_matches();
-
-
 
     match config::parse() {
         Ok(mut sources) => {
             match Action::new(&matches) {
-                Action::Build(package, force) => {
-                    Repo::prepare(sources, Packages::Select(&[package], force))
+                Action::Build(packages, force) => {
+                    Repo::prepare(sources, Packages::Select(&packages, force))
                         .download()
                         .build()
                         .generate();
+                },
+                Action::Clean => {
+                    Repo::prepare(sources, Packages::All).clean();
+                }
+                Action::Dist => {
+                    Repo::prepare(sources, Packages::All).generate();
                 },
                 Action::UpdateRepository => {
                     Repo::prepare(sources, Packages::All)
@@ -114,6 +135,12 @@ fn main() {
                     }
                 },
                 Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
+                Action::Pool => {
+                    Repo::prepare(sources, Packages::All).download();
+                },
+                Action::Remove(packages) => {
+                    Repo::prepare(sources, Packages::Select(&packages, false)).remove();
+                }
                 Action::Update(key, value) => match sources.update(key, value.to_owned()) {
                     Ok(()) => match sources.write_to_disk() {
                         Ok(()) => info!("successfully wrote config changes to disk"),
