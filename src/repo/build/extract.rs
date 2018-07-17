@@ -24,6 +24,7 @@ fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
 
     fs::create_dir_all(dst)
         .and_then(|_| Command::new("unzip")
+            .arg("-qq")
             .arg(path)
             .arg("-d")
             .arg(dst)
@@ -31,7 +32,7 @@ fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
             .and_then(|x| if x.success() {
                 Ok(())
             } else {
-                Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
+                Err(io::Error::new(io::ErrorKind::Other, "unzip command failed"))
             })
         )
 }
