@@ -106,8 +106,10 @@ fn fetch_assets(
                     .map_err(|why| BuildError::Directory { path: new_path, why })?;
             }
         } else {
+            let relative = path.strip_prefix(src).unwrap();
+            let dst = dst.join(relative);
             let src = path.canonicalize().unwrap();
-            linked.push(link_artifact(&src, dst)?);
+            linked.push(link_artifact(&src, &dst)?);
         }
     }
 
@@ -118,6 +120,10 @@ fn fetch_assets(
 pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
+    if project_directory.exists() {
+        let _ = fs::remove_dir_all(&project_directory);
+    }
+
     let _ = fs::create_dir_all(&project_directory);
 
     {
