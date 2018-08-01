@@ -120,19 +120,17 @@ fn fetch_assets(
 pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
-    if project_directory.exists() {
-        let _ = fs::remove_dir_all(&project_directory);
-    }
 
-    let _ = fs::create_dir_all(&project_directory);
-
-    {
-        if let Some(SourceLocation::URL { ref url, .. }) = item.location {
-            let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
-            let src = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
-            extract::extract(&src, &project_directory)
-                .map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
+    if let Some(SourceLocation::URL { ref url, .. }) = item.location {
+        if project_directory.exists() {
+            let _ = fs::remove_dir_all(&project_directory);
         }
+
+        let _ = fs::create_dir_all(&project_directory);
+        let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
+        let src = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
+        extract::extract(&src, &project_directory)
+            .map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
     }
 
     let mut linked: Vec<LinkedArtifact> = Vec::new();

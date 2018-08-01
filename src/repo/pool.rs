@@ -29,7 +29,7 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, actio
         if let (Some(filename), Some(filestem)) = (filename, filestem) {
             let mut package = &filename[..filename.find('_').unwrap_or(0)];
 
-            let is_source = ["dsc", "tar.xz"].into_iter().any(|ext| filename.ends_with(ext));
+            let is_source = ["dsc", "tar.xz", "tar.gz"].into_iter().any(|ext| filename.ends_with(ext));
             let destination = if is_source {
                 PathBuf::from(
                     ["repo/pool/", archive, "/main/source/", &package[0..1], "/", package].concat()
