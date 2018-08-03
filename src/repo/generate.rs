@@ -22,17 +22,16 @@ pub(crate) fn binary_files(config: &Config, dist_base: &str, suites: &[(String, 
     info!("generating binary files");
     suites.par_iter().map(|&(ref arch, ref path)| {
         info!("generating binary files for {}, from {}", arch, path.display());
-        let out_path: &Path = &Path::new(dist_base).join("main").join(arch);
-
-        fs::create_dir_all(path)?;
-        fs::create_dir_all(out_path)?;
-
         let arch = match arch.as_str() {
             "amd64" => "binary-amd64",
             "i386" => "binary-i386",
             "all" => "binary-all",
             arch => panic!("unsupported architecture: {}", arch),
         };
+        let out_path: &Path = &Path::new(dist_base).join("main").join(arch);
+
+        fs::create_dir_all(path)?;
+        fs::create_dir_all(out_path)?;
 
         Command::new("apt-ftparchive")
             .arg("packages")
