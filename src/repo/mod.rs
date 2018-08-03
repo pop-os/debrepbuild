@@ -9,6 +9,7 @@ use std::{env, fs, io};
 use std::path::PathBuf;
 use std::process::exit;
 use config::Config;
+use rayon;
 
 pub enum Packages<'a> {
     All,
@@ -83,6 +84,8 @@ impl<'a> Repo<'a> {
 pub enum ReleaseError {
     #[fail(display = "failed to generate release files for binaries: {}", why)]
     Binary { why: io::Error },
+    #[fail(display = "failed to generate contents for binaries: {}", why)]
+    Contents { why: io::Error },
     #[fail(display = "failed to generate source index: {}", why)]
     Source { why: io::Error },
     #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
@@ -104,16 +107,39 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
     let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
-    generate::generate_binary_files(sources, &base, &pool).map_err(|why| ReleaseError::Binary { why })?;
-    generate::generate_sources_index(&base, &pool).map_err(|why| ReleaseError::Source { why })?;
-    generate::generate_dists_release(sources, &base).map_err(|why| ReleaseError::Dists {
-        archive: sources.archive.clone(),
-        why,
-    })?;
+    let mut binary_result = Ok(());
+    let mut sources_result = Ok(());
+    let mut contents_result = Ok(());
+    let mut dists_result = Ok(());
 
-    generate::gpg_in_release(&sources.email, &release, &in_release)
-        .map_err(|why| ReleaseError::InRelease { why })?;
+    rayon::scope(|s| {
+        s.spawn(|_| {
+            binary_result = generate::binary_files(sources, &base, &pool).map_err(|why| ReleaseError::Binary { why });
+            dists_result = generate::dists_release(sources, &base).map_err(|why| ReleaseError::Dists {
+                archive: sources.archive.clone(),
+                why,
+            });
+        });
+        s.spawn(|_| {
+            sources_result = generate::sources_index(&base, &pool).map_err(|why| ReleaseError::Source { why });
+        });
+        s.spawn(|_| {
+            contents_result = generate::contents(&base, &pool).map_err(|why| ReleaseError::Contents { why });
+        });
+    });
 
-    generate::gpg_release(&sources.email, &release, &release_gpg)
-        .map_err(|why| ReleaseError::ReleaseGPG { why })
+    binary_result.and(sources_result).and(contents_result).and(dists_result)?;
+
+    let (inrelease, release) = rayon::join(
+        || {
+            generate::gpg_in_release(&sources.email, &release, &in_release)
+                .map_err(|why| ReleaseError::InRelease { why })
+        },
+        || {
+            generate::gpg_release(&sources.email, &release, &release_gpg)
+            .map_err(|why| ReleaseError::ReleaseGPG { why })
+        }
+    );
+
+    inrelease.and(release)
 }
