@@ -18,7 +18,11 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
     info!("checking if {} needs to be downloaded", item.name);
 
     fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
-        [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
+        if ext == "tar.gz" || ext == "tar.xz" || ext == "dsc" {
+            [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
+        } else {
+            [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
+        }
     }
 
     let mut downloaded = 0;
