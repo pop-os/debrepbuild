@@ -9,7 +9,7 @@ mod version;
 use config::Config;
 use rayon;
 use std::{env, fs, io};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
 pub enum Packages<'a> {
@@ -95,6 +95,8 @@ pub enum ReleaseError {
     InRelease { why: io::Error },
     #[fail(display = "failed to generate Release.gpg file: {}", why)]
     ReleaseGPG { why: io::Error },
+    #[fail(display = "unable to get list of suites from pool directory: {}", why)]
+    Suites { why: io::Error }
 }
 
 /// Generate the dist release files from the existing binary and source files.
@@ -108,28 +110,40 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
     let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
+    let binary_suites = &binary_suites(&Path::new(&pool))
+        .map_err(|why| ReleaseError::Suites { why })?;
+
     let mut binary_result = Ok(());
     let mut sources_result = Ok(());
     let mut contents_result = Ok(());
-    let mut dists_result = Ok(());
 
     rayon::scope(|s| {
+        // Generate Packages archives
         s.spawn(|_| {
-            binary_result = generate::binary_files(sources, &base, &pool).map_err(|why| ReleaseError::Binary { why });
-            dists_result = generate::dists_release(sources, &base).map_err(|why| ReleaseError::Dists {
-                archive: sources.archive.clone(),
-                why,
-            });
+            binary_result = generate::binary_files(sources, &base, binary_suites)
+                .map_err(|why| ReleaseError::Binary { why });
         });
+
+        // Generate Sources archives
         s.spawn(|_| {
-            sources_result = generate::sources_index(&base, &pool).map_err(|why| ReleaseError::Source { why });
+            sources_result = generate::sources_index(&base, &pool)
+                .map_err(|why| ReleaseError::Source { why });
         });
+
+        // Generate Contents archives
         s.spawn(|_| {
-            contents_result = generate::contents(&base, &pool).map_err(|why| ReleaseError::Contents { why });
+            contents_result = generate::contents(&base, binary_suites)
+                .map_err(|why| ReleaseError::Contents { why });
         });
     });
 
-    binary_result.and(sources_result).and(contents_result).and(dists_result)?;
+    binary_result.and(sources_result).and(contents_result)?;
+
+    generate::dists_release(sources, &base)
+        .map_err(|why| ReleaseError::Dists {
+            archive: sources.archive.clone(),
+            why,
+        })?;
 
     let (inrelease, release) = rayon::join(
         || {
@@ -143,4 +157,25 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     );
 
     inrelease.and(release)
+}
+
+fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
+    Ok(fs::read_dir(pool_base)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let arch = entry.file_name();
+            if &arch == "source" {
+                None
+            } else {
+                let path = pool_base.join(&arch);
+                let arch = match arch.to_str().unwrap() {
+                    "binary-amd64" => "amd64",
+                    "binary-i386" => "i386",
+                    "binary-all" => "all",
+                    arch => panic!("unsupported architecture: {}", arch),
+                };
+
+                Some((arch.to_owned(), path))
+            }
+        }).collect())
 }

@@ -18,46 +18,51 @@ use super::compress::*;
 
 /// Generates the binary files from Debian packages that exist within the pool, using
 /// `apt-ftparchive`
-pub(crate) fn binary_files(config: &Config, dist_base: &str, pool_base: &str) -> io::Result<()> {
+pub(crate) fn binary_files(config: &Config, dist_base: &str, suites: &[(String, PathBuf)]) -> io::Result<()> {
     info!("generating binary files");
-    let branch = PathBuf::from([dist_base, "/main/"].concat());
+    suites.par_iter().map(|&(ref arch, ref path)| {
+        info!("generating binary files for {}, from {}", arch, path.display());
+        let out_path: &Path = &Path::new(dist_base).join("main").join(arch);
 
-    for directory in fs::read_dir(pool_base)? {
-        let entry = directory?;
-        let arch = entry.file_name();
-        if &arch == "source" { continue }
-        let path = branch.join(&arch);
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
+        fs::create_dir_all(out_path)?;
+
+        let arch = match arch.as_str() {
+            "amd64" => "binary-amd64",
+            "i386" => "binary-i386",
+            "all" => "binary-all",
+            arch => panic!("unsupported architecture: {}", arch),
+        };
 
         Command::new("apt-ftparchive")
             .arg("packages")
-            .arg(PathBuf::from(pool_base).join(&arch))
+            .arg(path)
             .stderr(Stdio::inherit())
             .stdout(Stdio::piped())
             .spawn()
-            .and_then(|child| {
-                compress("Packages", &path, child.stdout.unwrap(), UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+            .and_then(|mut child| {
+                {
+                    let stdout = child.stdout.as_mut().unwrap();
+                    compress("Packages", out_path, stdout, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)?;
+                }
+                
+                child.wait().and_then(|stat| {
+                    if stat.success() {
+                        Ok(())
+                    } else {
+                        Err(io::Error::new(io::ErrorKind::Other, "apt-ftparchive failed"))
+                    }
+                })
             })?;
 
-        let mut release = File::create(path.join("Release"))?;
+        let mut release = File::create(out_path.join("Release"))?;
         writeln!(&mut release, "Archive: {}", config.archive)?;
         writeln!(&mut release, "Version: {}", config.version)?;
         writeln!(&mut release, "Component: main")?;
         writeln!(&mut release, "Origin: {}", config.origin)?;
         writeln!(&mut release, "Label: {}", config.label)?;
-        writeln!(
-            &mut release,
-            "Architecture: {}",
-            match arch.to_str().unwrap() {
-                "binary-amd64" => "amd64",
-                "binary-i386" => "i386",
-                "binary-all" => "all",
-                arch => panic!("unsupported architecture: {}", arch),
-            }
-        )?;
-    }
-
-    Ok(())
+        writeln!(&mut release, "Architecture: {}", arch)
+    }).collect()
 }
 
 pub(crate) fn sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> {
@@ -71,8 +76,19 @@ pub(crate) fn sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> 
         .stderr(Stdio::inherit())
         .stdout(Stdio::piped())
         .spawn()
-        .and_then(|child| {
-            compress("Sources", &path, child.stdout.unwrap(), UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+        .and_then(|mut child| {
+            {
+                let stdout = child.stdout.as_mut().unwrap();
+                compress("Sources", &path, stdout, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)?;
+            }
+            
+            child.wait().and_then(|stat| {
+                if stat.success() {
+                    Ok(())
+                } else {
+                    Err(io::Error::new(io::ErrorKind::Other, "apt-ftparchive failed"))
+                }
+            })
         })
 }
 
@@ -253,31 +269,11 @@ enum DecoderVariant {
     Gz,
 }
 
-pub(crate) fn contents(dist_base: &str, pool_base: &str) -> io::Result<()> {
+pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Result<()> {
     info!("generating content archives");
     let branch_name = "main";
-    let branch: &Path = &PathBuf::from(pool_base);
-
-    let suites: Vec<(String, PathBuf)> = fs::read_dir(pool_base)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let arch = entry.file_name();
-            if &arch == "source" {
-                None
-            } else {
-                let path = branch.join(&arch);
-                let arch = match arch.to_str().unwrap() {
-                    "binary-amd64" => "amd64",
-                    "binary-i386" => "i386",
-                    "binary-all" => "all",
-                    arch => panic!("unsupported architecture: {}", arch),
-                };
-
-                Some((arch.to_owned(), path))
-            }
-        }).collect();
     
-    suites.into_par_iter().map(|(arch, path)| {
+    suites.par_iter().map(|&(ref arch, ref path)| {
         let mut file_map = BTreeMap::new();
 
         // Collects a list of deb packages to read, and then reads them in parallel.

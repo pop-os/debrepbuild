@@ -38,7 +38,8 @@ pub fn compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) ->
     };
 
     info!(
-        "compressing to {}: uncompressed: {}, gzip: {}, xz: {}",
+        "compressing {} to {}: uncompressed: {}, gzip: {}, xz: {}",
+        name,
         path.display(),
         support & UNCOMPRESSED != 0,
         support & GZ_COMPRESS != 0,
