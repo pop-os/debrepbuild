@@ -346,7 +346,10 @@ pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Res
                     let package = match (package, section) {
                         (Some(ref package), Some(ref section)) if branch_name == "main" => [section, "/", package].concat(),
                         (Some(ref package), Some(ref section)) => [branch_name, "/", section, "/", package].concat(),
-                        _ => unimplemented!()
+                        _ => return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "did not find package + section from control archive"
+                        ))
                     };
 
                     let mut archive = ar::Archive::new(File::open(&debian_entry)?);
@@ -359,14 +362,17 @@ pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Res
                     for entry in tar::Archive::new(reader).entries()? {
                         let entry = entry?;
                         if entry.header().entry_type().is_dir() {
-                        continue 
+                            continue
                         }
 
                         let path = entry.path()?;
                         output.push((path.to_path_buf(), package.clone()));
                     }
                 } else {
-                    panic!("could not find data + control entries in ar archive");
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "could not find data + control entries in deb archive"
+                    ));
                 }
 
                 Ok(output)
