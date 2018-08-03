@@ -255,24 +255,30 @@ enum DecoderVariant {
 
 pub(crate) fn contents(dist_base: &str, pool_base: &str) -> io::Result<()> {
     info!("generating content archives");
-
-    let mut file_map = BTreeMap::new();
     let branch_name = "main";
     let branch: &Path = &PathBuf::from(pool_base);
 
-    for directory in fs::read_dir(pool_base)? {
-        let entry = directory?;
-        let arch = entry.file_name();
-        if &arch == "source" { continue }
-        let path = branch.join(&arch);
-        file_map.clear();
+    let suites: Vec<(String, PathBuf)> = fs::read_dir(pool_base)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let arch = entry.file_name();
+            if &arch == "source" {
+                None
+            } else {
+                let path = branch.join(&arch);
+                let arch = match arch.to_str().unwrap() {
+                    "binary-amd64" => "amd64",
+                    "binary-i386" => "i386",
+                    "binary-all" => "all",
+                    arch => panic!("unsupported architecture: {}", arch),
+                };
 
-        let arch = match arch.to_str().unwrap() {
-            "binary-amd64" => "amd64",
-            "binary-i386" => "i386",
-            "binary-all" => "all",
-            arch => panic!("unsupported architecture: {}", arch),
-        };
+                Some((arch.to_owned(), path))
+            }
+        }).collect();
+    
+    suites.into_par_iter().map(|(arch, path)| {
+        let mut file_map = BTreeMap::new();
 
         // Collects a list of deb packages to read, and then reads them in parallel.
         let entries: Vec<io::Result<Vec<(PathBuf, String)>>> = misc::walk_debs(&path)
@@ -378,15 +384,13 @@ pub(crate) fn contents(dist_base: &str, pool_base: &str) -> io::Result<()> {
             }
         }
 
-        let mut reader = ContentReader {
+        let reader = ContentReader {
             buffer: Vec::with_capacity(64 * 1024),
             data: ContentIterator {
                 content: file_map.clone().into_iter()
             }
         };
 
-        compress(&["Contents-", arch].concat(), &Path::new(dist_base), reader, GZ_COMPRESS | XZ_COMPRESS)?;
-    }
-
-    Ok(())
+        compress(&["Contents-", &arch].concat(), &Path::new(dist_base), reader, GZ_COMPRESS | XZ_COMPRESS)
+    }).collect()
 }
