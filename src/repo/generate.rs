@@ -3,7 +3,6 @@ use config::Config;
 use libflate::gzip::Decoder as GzDecoder;
 use misc;
 use rayon::prelude::*;
-use std::collections::BTreeMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -22,16 +21,17 @@ pub(crate) fn binary_files(config: &Config, dist_base: &str, suites: &[(String, 
     info!("generating binary files");
     suites.par_iter().map(|&(ref arch, ref path)| {
         info!("generating binary files for {}, from {}", arch, path.display());
+        let out_path: &Path = &Path::new(dist_base).join("main").join(arch);
+
+        fs::create_dir_all(path)?;
+        fs::create_dir_all(out_path)?;
+
         let arch = match arch.as_str() {
             "amd64" => "binary-amd64",
             "i386" => "binary-i386",
             "all" => "binary-all",
             arch => panic!("unsupported architecture: {}", arch),
         };
-        let out_path: &Path = &Path::new(dist_base).join("main").join(arch);
-
-        fs::create_dir_all(path)?;
-        fs::create_dir_all(out_path)?;
 
         Command::new("apt-ftparchive")
             .arg("packages")
@@ -268,27 +268,32 @@ enum DecoderVariant {
     Gz,
 }
 
+struct ContentsEntry {
+    package: String,
+    files: Vec<PathBuf>
+}
+
 pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Result<()> {
     info!("generating content archives");
     let branch_name = "main";
     
     suites.par_iter().map(|&(ref arch, ref path)| {
-        let mut file_map = BTreeMap::new();
-
         // Collects a list of deb packages to read, and then reads them in parallel.
-        let entries: Vec<io::Result<Vec<(PathBuf, String)>>> = misc::walk_debs(&path)
+        let entries: Vec<io::Result<ContentsEntry>> = misc::walk_debs(&path)
             .filter(|e| !e.file_type().is_dir())
             .map(|e| e.path().to_path_buf())
             .collect::<Vec<PathBuf>>()
             .into_par_iter()
             .map(|debian_entry| {
-                let mut output = Vec::new();
+                let mut files = Vec::new();
                 info!("processing contents of {:?}", debian_entry);
                 let mut archive = ar::Archive::new(File::open(&debian_entry)?);
 
                 let mut control = None;
                 let mut data = None;
                 let mut entry_id = 0;
+                let package_name: String;
+
                 while let Some(entry_result) = archive.next_entry() {
                     if let Ok(mut entry) = entry_result {
                         match entry.header().identifier() {
@@ -342,13 +347,15 @@ pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Res
                         }
                     }
 
-                    let package = match (package, section) {
+                    package_name = match (package, section) {
                         (Some(ref package), Some(ref section)) if branch_name == "main" => [section, "/", package].concat(),
                         (Some(ref package), Some(ref section)) => [branch_name, "/", section, "/", package].concat(),
-                        _ => return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "did not find package + section from control archive"
-                        ))
+                        _ => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "did not find package + section from control archive"
+                            ));
+                        }
                     };
 
                     let mut archive = ar::Archive::new(File::open(&debian_entry)?);
@@ -365,7 +372,7 @@ pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Res
                         }
 
                         let path = entry.path()?;
-                        output.push((path.to_path_buf(), package.clone()));
+                        files.push(path.to_path_buf());
                     }
                 } else {
                     return Err(io::Error::new(
@@ -374,21 +381,47 @@ pub(crate) fn contents(dist_base: &str, suites: &[(String, PathBuf)]) -> io::Res
                     ));
                 }
 
-                Ok(output)
+                Ok(ContentsEntry { package: package_name, files })
             }).collect();
-        
-        for entry in entries {
-            for (path, package) in entry? {
-                if let Some(duplicate) = file_map.insert(path, package) {
-                    warn!("duplicate entry: {}", duplicate);
+
+        // Mux the files together, and sort the entries by paths.
+        let file_map = {
+            let mut combined_capacity = 0;
+            let mut packages = Vec::with_capacity(entries.len());
+            for entry in entries {
+                let entry = entry?;
+                combined_capacity += entry.files.len();
+                packages.push(entry);
+            }
+
+            let mut file_map = Vec::with_capacity(combined_capacity);
+            
+            for entry in packages {
+                for path in entry.files {
+                    file_map.push((path, entry.package.clone()));
                 }
             }
-        }
+
+            file_map.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            file_map
+        };
+
+        // Check for duplicate entries, and error if found.
+        file_map.windows(2)
+            .position(|window| window[0] == window[1])
+            .map_or(Ok(()), |pos| {
+                let a = &file_map[pos];
+                let b = &file_map[pos+1];
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("{} and {} both have {}", a.1, b.1, a.0.display())
+                ))
+            })?;
 
         let reader = ContentReader {
             buffer: Vec::with_capacity(64 * 1024),
             data: ContentIterator {
-                content: file_map.clone().into_iter()
+                content: file_map.into_iter()
             }
         };
 
