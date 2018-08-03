@@ -51,36 +51,6 @@ pub fn get_arch_from_stem(stem: &str) -> &str {
     arch.find('-').map_or(arch, |pos| &arch[..pos])
 }
 
-pub struct MultiWriter<'a, W: 'a> {
-    destinations: &'a mut [W]
-}
-
-impl<'a, W: 'a + io::Write> MultiWriter<'a, W> {
-    pub fn new(destinations: &'a mut [W]) -> Self {
-        MultiWriter { destinations }
-    }
-}
-
-impl<'a, W: 'a + io::Write> io::Write for MultiWriter<'a, W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut written = 0;
-        for destinations in self.destinations.iter_mut() {
-            destinations.write_all(buf)?;
-            written += buf.len();
-        }
-
-        Ok(written)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        for destinations in self.destinations.iter_mut() {
-            destinations.flush()?;
-        }
-
-        Ok(())
-    }
-}
-
 // NOTE: The following functions are implemented within Rust's standard in 1.26.0
 
 fn initial_buffer_size(file: &File) -> usize {

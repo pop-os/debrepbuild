@@ -1,15 +1,16 @@
-mod download;
 mod build;
+mod compress;
+mod download;
 mod generate;
 mod pool;
 mod prepare;
 mod version;
 
+use config::Config;
+use rayon;
 use std::{env, fs, io};
 use std::path::PathBuf;
 use std::process::exit;
-use config::Config;
-use rayon;
 
 pub enum Packages<'a> {
     All,

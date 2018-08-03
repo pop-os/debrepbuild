@@ -1,23 +1,20 @@
 use ar;
-use bus_writer::BusWriter;
 use config::Config;
-use deflate::Compression;
-use deflate::write::GzEncoder;
 use libflate::gzip::Decoder as GzDecoder;
 use misc;
-use misc::MultiWriter;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use tar;
 use xz2::read::XzDecoder;
-use xz2::write::XzEncoder;
+
+use super::compress::*;
 
 /// Generates the binary files from Debian packages that exist within the pool, using
 /// `apt-ftparchive`
@@ -32,16 +29,15 @@ pub(crate) fn binary_files(config: &Config, dist_base: &str, pool_base: &str) ->
         let path = branch.join(&arch);
         fs::create_dir_all(&path)?;
 
-        // TODO: write directly to compressor.
-        let package = Command::new("apt-ftparchive")
+        Command::new("apt-ftparchive")
             .arg("packages")
             .arg(PathBuf::from(pool_base).join(&arch))
-            .output()
-            .map(|data| data.stdout)?;
-
-        let data = io::Cursor::new(package);
-
-        compress("Packages", &path, data, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)?;
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|child| {
+                compress("Packages", &path, child.stdout.unwrap(), UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+            })?;
 
         let mut release = File::create(path.join("Release"))?;
         writeln!(&mut release, "Archive: {}", config.archive)?;
@@ -69,57 +65,15 @@ pub(crate) fn sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> 
     let path = PathBuf::from([dist_base, "/main/source/"].concat());
     fs::create_dir_all(&path)?;
 
-    // TODO: write directly to compressor.
-    let data = Command::new("apt-ftparchive")
+    Command::new("apt-ftparchive")
         .arg("sources")
         .arg(PathBuf::from(pool_base).join("source"))
-        .output()
-        .map(|data| data.stdout)?;
-    
-    let data = io::Cursor::new(data);
-    compress("Sources", &path, data, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
-}
-
-const UNCOMPRESSED: u8 = 1;
-const GZ_COMPRESS: u8 = 2;
-const XZ_COMPRESS: u8 = 4;
-
-trait SyncWrite: Send + Sync + io::Write {}
-impl<T: Send + Sync + io::Write> SyncWrite for T {}
-
-fn compress<R: Read>(name: &str, path: &Path, stream: R, support: u8) -> io::Result<()> {
-    if support == 0 {
-        return Ok(());
-    }
-
-    let mut destinations = {
-        let mut writers: Vec<Box<SyncWrite>> = Vec::new();
-        if support & UNCOMPRESSED != 0 {
-            writers.push(Box::new(File::create(path.join(name))?));
-        }
-
-        if support & GZ_COMPRESS != 0 {
-            let mut gz_file = File::create(path.join([name, ".gz"].concat()))?;
-            writers.push(Box::new(GzEncoder::new(gz_file, Compression::Best)));
-        }
-
-        if support & XZ_COMPRESS != 0 {
-            let mut xz_file = File::create(path.join([name, ".xz"].concat()))?;
-            writers.push(Box::new(XzEncoder::new(xz_file, 9)));
-        }
-
-        writers
-    };
-
-    info!(
-        "compressing to {}: uncompressed: {}, gzip: {}, xz: {}",
-        path.display(),
-        support & UNCOMPRESSED != 0,
-        support & GZ_COMPRESS != 0,
-        support & XZ_COMPRESS != 0
-    );
-
-    BusWriter::new(stream, &mut destinations, |_| {}, || false).write()
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .spawn()
+        .and_then(|child| {
+            compress("Sources", &path, child.stdout.unwrap(), UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+        })
 }
 
 /// Generates the dists release file via `apt-ftparchive`.
