@@ -224,46 +224,37 @@ struct ContentReader<T> {
 impl<T: Iterator<Item = Vec<u8>>> io::Read for ContentReader<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.buffer.is_empty() {
-            let data = match self.data.next() {
-                Some(data) => data,
-                None => return Ok(0)
-            };
-
-            let to_write = data.len().min(buf.len());
-            buf[..to_write].copy_from_slice(&data[..to_write]);
-            if to_write != data.len() {
-                let leftovers = data.len() - to_write;
-                if self.buffer.capacity() < leftovers {
-                    let reserve = self.buffer.capacity() - leftovers;
-                    self.buffer.reserve_exact(reserve);
+            while self.buffer.len() < buf.len() {
+                match self.data.next() {
+                    Some(data) => self.buffer.extend_from_slice(&data),
+                    None => break
                 }
-
-                self.buffer.truncate(leftovers);
-                self.buffer.copy_from_slice(&data[to_write..]);
             }
 
-            Ok(to_write)
-        } else {
-            let to_write = self.buffer.len().min(buf.len());
-            buf[..to_write].copy_from_slice(&self.buffer[..to_write]);
-            if to_write != self.buffer.len() {
-                let leftovers = self.buffer.len() - to_write;
-                if self.buffer.capacity() < leftovers {
-                    let reserve = self.buffer.capacity() - leftovers;
-                    self.buffer.reserve_exact(reserve);
-                }
-
-                for (new, old) in (to_write..self.buffer.len()).enumerate() {
-                    self.buffer[new] = self.buffer[old];
-                }
-
-                self.buffer.truncate(leftovers);
-            } else {
-                self.buffer.clear();
+            if self.buffer.is_empty() {
+                return Ok(0);
             }
-
-            Ok(to_write)
         }
+
+        let to_write = self.buffer.len().min(buf.len());
+        buf[..to_write].copy_from_slice(&self.buffer[..to_write]);
+        if to_write != self.buffer.len() {
+            let leftovers = self.buffer.len() - to_write;
+            if self.buffer.capacity() < leftovers {
+                let reserve = self.buffer.capacity() - leftovers;
+                self.buffer.reserve_exact(reserve);
+            }
+
+            for (new, old) in (to_write..self.buffer.len()).enumerate() {
+                self.buffer[new] = self.buffer[old];
+            }
+
+            self.buffer.truncate(leftovers);
+        } else {
+            self.buffer.clear();
+        }
+
+        Ok(to_write)
     }
 }
 
