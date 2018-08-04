@@ -253,9 +253,13 @@ impl<T: Iterator<Item = Vec<u8>>> io::Read for ContentReader<T> {
                     self.buffer.reserve_exact(reserve);
                 }
 
+                for (new, old) in (to_write..self.buffer.len()).enumerate() {
+                    self.buffer[new] = self.buffer[old];
+                }
+
                 self.buffer.truncate(leftovers);
-                let temp = self.buffer[to_write..].to_owned();
-                self.buffer.copy_from_slice(&temp);
+            } else {
+                self.buffer.clear();
             }
 
             Ok(to_write)
