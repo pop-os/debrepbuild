@@ -3,7 +3,7 @@ use checksum::hasher;
 use rayon::prelude::*;
 use reqwest;
 use sha2::Sha256;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 use std::process::Command;
 use super::DownloadError;
@@ -15,10 +15,10 @@ pub fn parallel(items: &[Source]) -> Vec<Result<(), DownloadError>> {
 
 pub fn download(item: &Source) -> Result<(), DownloadError> {
     match item.location {
-        Some(SourceLocation::Git { ref url, ref branch }) => {
+        Some(SourceLocation::Git { ref git, ref branch }) => {
             match *branch {
                 Some(ref _branch) => unimplemented!(),
-                None => download_git(url)
+                None => download_git(git)
             }
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
@@ -67,6 +67,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
     if digest == checksum {
         Ok(())
     } else {
+        let _ = fs::remove_file(&destination);
         Err(DownloadError::ChecksumInvalid {
             name: item.name.clone(),
             expected: checksum.to_owned(),

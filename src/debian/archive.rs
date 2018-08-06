@@ -40,8 +40,16 @@ impl<'a> DebianArchive<'a> {
             entry_id += 1;
         }
 
-        let data = data.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "data archive not found"))?;
-        let control = control.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "control archive not found"))?;
+        let data = data.ok_or_else(|| io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("data archive not found in {}", path.display())
+        ))?;
+
+        let control = control.ok_or_else(|| io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("control archive not found in {}", path.display())
+        ))?;
+        
         Ok(DebianArchive { path, control, data })
     }
 

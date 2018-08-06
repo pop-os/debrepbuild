@@ -121,6 +121,7 @@ fn main() {
 
     match config::parse() {
         Ok(mut sources) => {
+            debug!("Config: {:#?}", sources);
             match Action::new(&matches) {
                 Action::Build(packages, force) => {
                     Repo::prepare(sources, Packages::Select(&packages, force))

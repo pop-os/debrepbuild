@@ -20,7 +20,7 @@ pub enum DebianPath {
 #[serde(untagged)]
 pub enum SourceLocation {
     URL { url: String, checksum: String },
-    Git { url: String, branch: Option<String> },
+    Git { git: String, branch: Option<String> },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
