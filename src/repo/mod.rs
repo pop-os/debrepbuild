@@ -1,5 +1,4 @@
 mod build;
-mod compress;
 mod download;
 mod generate;
 mod pool;
@@ -104,7 +103,10 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
     let base = ["dists/", &sources.archive].concat();
     let pool = ["pool/", &sources.archive, "/main"].concat();
-    let _ = fs::create_dir_all(&base);
+
+    for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
+        let _ = fs::create_dir_all([&base, "/main/", arch].concat());
+    }
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
@@ -113,31 +115,24 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let binary_suites = &binary_suites(&Path::new(&pool))
         .map_err(|why| ReleaseError::Suites { why })?;
 
-    let mut binary_result = Ok(());
     let mut sources_result = Ok(());
     let mut contents_result = Ok(());
 
     rayon::scope(|s| {
-        // Generate Packages archives
-        s.spawn(|_| {
-            binary_result = generate::binary_files(sources, &base, binary_suites)
-                .map_err(|why| ReleaseError::Binary { why });
-        });
-
         // Generate Sources archives
         s.spawn(|_| {
             sources_result = generate::sources_index(&base, &pool)
                 .map_err(|why| ReleaseError::Source { why });
         });
 
-        // Generate Contents archives
+        // Generate Contents & Packages archives
         s.spawn(|_| {
-            contents_result = generate::contents(&base, binary_suites)
+            contents_result = generate::contents(sources, &base, binary_suites)
                 .map_err(|why| ReleaseError::Contents { why });
         });
     });
 
-    binary_result.and(sources_result).and(contents_result)?;
+    sources_result.and(contents_result)?;
 
     generate::dists_release(sources, &base)
         .map_err(|why| ReleaseError::Dists {
@@ -152,7 +147,7 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
         },
         || {
             generate::gpg_release(&sources.email, &release, &release_gpg)
-            .map_err(|why| ReleaseError::ReleaseGPG { why })
+                .map_err(|why| ReleaseError::ReleaseGPG { why })
         }
     );
 

@@ -36,6 +36,10 @@ walkdir = "2.1.4"
 xz2 = "0.1.5"
 tar = "0.4.16"
 libflate = "0.1.16"
+hex-view = "0.1.2"
+digest = "0.7.5"
+md-5 = "0.7.0"
+sha-1 = "0.7.0"
 
 [build-dependencies]
 vergen = "0.1.1"

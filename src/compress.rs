@@ -14,6 +14,14 @@ pub trait SyncWrite: Send + Sync + io::Write {}
 impl<T: Send + Sync + io::Write> SyncWrite for T {}
 
 pub fn compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) -> io::Result<()> {
+    inner_compress(name, path, stream, support)
+        .map_err(|why| io::Error::new(
+            io::ErrorKind::Other,
+            format!("failed to compress output to {} in {}: {}", name, path.display(), why)
+        ))
+}
+
+fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) -> io::Result<()> {
     if support == 0 {
         return Ok(());
     }

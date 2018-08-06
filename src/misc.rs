@@ -7,16 +7,20 @@ use std::path::Path;
 use libc;
 use walkdir::{DirEntry, WalkDir};
 
-pub fn walk_debs(path: &Path) -> Box<Iterator<Item = DirEntry>> {
-    fn is_deb(entry: &DirEntry) -> bool {
+pub fn walk_debs(path: &Path, include_ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
+    fn is_deb(entry: &DirEntry, include_ddeb: bool) -> bool {
         if entry.path().is_dir() {
             true
         } else {
-            entry.file_name().to_str().map_or(false, |e| e.ends_with(".deb"))
+            entry.file_name().to_str().map_or(false, |e| {
+                e.ends_with(".deb") || {
+                    if include_ddeb { e.ends_with(".ddeb") } else { false }
+                }
+            })
         }
     }
 
-    Box::new(WalkDir::new(path).into_iter().filter_entry(|e| is_deb(e)).flat_map(|e| e.ok()))
+    Box::new(WalkDir::new(path).into_iter().filter_entry(move |e| is_deb(e, include_ddeb)).flat_map(|e| e.ok()))
 }
 
 pub fn match_deb(entry: &DirEntry, packages: &[String]) -> Option<(String, usize)> {

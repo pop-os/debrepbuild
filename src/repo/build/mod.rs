@@ -341,7 +341,7 @@ fn sbuild<P: AsRef<Path>>(
         ));
 
     if let Some(ref depends) = item.depends {
-        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()))
+        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()), false)
             .flat_map(|deb| misc::match_deb(&deb, depends))
             .collect::<Vec<(String, usize)>>();
 

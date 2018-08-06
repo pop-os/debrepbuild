@@ -1,4 +1,3 @@
-mod checksum;
 mod direct;
 mod request;
 mod sources;
