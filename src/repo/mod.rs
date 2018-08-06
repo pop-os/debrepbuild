@@ -103,7 +103,10 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
     let base = ["dists/", &sources.archive].concat();
     let pool = ["pool/", &sources.archive, "/main"].concat();
-    let _ = fs::create_dir_all(&base);
+
+    for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
+        let _ = fs::create_dir_all([&base, "/main/", arch].concat());
+    }
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
@@ -111,6 +114,7 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
 
     let binary_suites = &binary_suites(&Path::new(&pool))
         .map_err(|why| ReleaseError::Suites { why })?;
+
 
     let mut sources_result = Ok(());
     let mut contents_result = Ok(());
