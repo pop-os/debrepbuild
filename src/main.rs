@@ -1,15 +1,20 @@
 extern crate ar;
 extern crate bus_writer;
 extern crate deflate;
+extern crate digest;
 extern crate failure;
 extern crate fern;
 extern crate glob;
+extern crate hex_view;
+extern crate itertools;
 extern crate libc;
 extern crate libflate;
+extern crate md5;
 extern crate rayon;
 extern crate reqwest;
 extern crate select;
 extern crate serde;
+extern crate sha1;
 extern crate sha2;
 extern crate subprocess;
 extern crate tar;
@@ -27,7 +32,11 @@ extern crate log;
 extern crate serde_derive;
 
 mod cli;
+pub mod checksum;
+pub mod compress;
 pub mod config;
+pub mod debian;
+pub mod iter_reader;
 pub mod misc;
 mod repo;
 

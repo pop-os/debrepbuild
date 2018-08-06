@@ -1,7 +1,8 @@
 use config::{Source, SourceLocation};
-use super::checksum::sha2_256_digest;
+use checksum::hasher;
 use rayon::prelude::*;
 use reqwest;
+use sha2::Sha256;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::Command;
@@ -33,7 +34,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 
     let requires_download = if destination.is_file() {
         let digest = File::open(&destination)
-            .and_then(sha2_256_digest)
+            .and_then(|f| hasher::<Sha256, File>(f))
             .map_err(|why| DownloadError::Open {
                 file: destination.clone(),
                 why
@@ -57,7 +58,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
     }
 
     let digest = File::open(&destination)
-        .and_then(sha2_256_digest)
+        .and_then(|f| hasher::<Sha256, File>(f))
         .map_err(|why| DownloadError::Open {
             file: destination.clone(),
             why
