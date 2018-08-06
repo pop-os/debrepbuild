@@ -115,7 +115,6 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let binary_suites = &binary_suites(&Path::new(&pool))
         .map_err(|why| ReleaseError::Suites { why })?;
 
-
     let mut sources_result = Ok(());
     let mut contents_result = Ok(());
 

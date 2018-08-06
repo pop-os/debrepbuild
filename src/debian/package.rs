@@ -1,9 +1,7 @@
-use config::Config;
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::{self, Write};
+use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct PackageEntry {
     pub control: BTreeMap<String, String>,
@@ -81,21 +79,4 @@ impl PackageEntry {
 
         Ok(output)
     }
-}
-
-pub fn write_release_file(config: &Config, destination: &Path, arch: &str) -> io::Result<()> {
-    inner_write_release_file(config, destination, arch).map_err(|why| io::Error::new(
-        io::ErrorKind::Other,
-        format!("failed to create release file for {}: {}", destination.display(), why)
-    ))
-}
-
-fn inner_write_release_file(config: &Config, destination: &Path, arch: &str) -> io::Result<()> {
-    let mut release = File::create(destination.join("Release"))?;
-    writeln!(&mut release, "Archive: {}", config.archive)?;
-    writeln!(&mut release, "Version: {}", config.version)?;
-    writeln!(&mut release, "Component: main")?;
-    writeln!(&mut release, "Origin: {}", config.origin)?;
-    writeln!(&mut release, "Label: {}", config.label)?;
-    writeln!(&mut release, "Architecture: {}", arch)
 }

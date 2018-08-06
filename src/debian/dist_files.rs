@@ -1,8 +1,9 @@
-
+use config::Config;
 use iter_reader::IteratorReader;
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::io;
+use std::fs::File;
+use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use super::*;
@@ -73,7 +74,7 @@ impl<'a> DistFiles<'a> {
             })
     }
 
-    pub fn compress(self) -> io::Result<()> {
+    pub fn compress_and_release(self, config: &Config) -> io::Result<()> {
         let contents = self.contents;
         let packages = self.packages;
         let arch = self.arch;
@@ -89,15 +90,16 @@ impl<'a> DistFiles<'a> {
             Vec::with_capacity(64 * 1024)
         );
 
-        debug!("compressing archives");
+        let binary_path = &path.join("main").join(match arch {
+            "amd64" => "binary-amd64",
+            "i386" => "binary-i386",
+            "all" => "binary-all",
+            arch => panic!("unsupported architecture: {}", arch),
+        });
+
         let (content_res, package_res) = rayon::join(
             || compress(&["Contents-", arch].concat(), path, contents_reader, GZ_COMPRESS | XZ_COMPRESS),
-            || compress("Packages", &path.join("main").join(match arch {
-                "amd64" => "binary-amd64",
-                "i386" => "binary-i386",
-                "all" => "binary-all",
-                arch => panic!("unsupported architecture: {}", arch),
-            }), packages_reader, GZ_COMPRESS | XZ_COMPRESS)
+            || compress("Packages", binary_path, packages_reader, GZ_COMPRESS | XZ_COMPRESS)
         );
 
         content_res.map_err(|why| io::Error::new(
@@ -108,6 +110,11 @@ impl<'a> DistFiles<'a> {
         package_res.map_err(|why| io::Error::new(
             io::ErrorKind::Other,
             format!("failed to generate content archive at {}: {}", path.display(), why)
+        ))?;
+
+        inner_write_release_file(config, binary_path, arch).map_err(|why| io::Error::new(
+            io::ErrorKind::Other,
+            format!("failed to create release file for {}: {}", binary_path.display(), why)
         ))
     }
 }
@@ -138,4 +145,14 @@ impl<T: Iterator<Item = (PathBuf, String)>> Iterator for ContentsIterator<T> {
 pub struct ContentsEntry {
     pub package: String,
     pub files: Vec<PathBuf>
+}
+
+fn inner_write_release_file(config: &Config, destination: &Path, arch: &str) -> io::Result<()> {
+    let mut release = File::create(destination.join("Release"))?;
+    writeln!(&mut release, "Archive: {}", config.archive)?;
+    writeln!(&mut release, "Version: {}", config.version)?;
+    writeln!(&mut release, "Component: main")?;
+    writeln!(&mut release, "Origin: {}", config.origin)?;
+    writeln!(&mut release, "Label: {}", config.label)?;
+    writeln!(&mut release, "Architecture: {}", arch)
 }

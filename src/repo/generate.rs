@@ -225,7 +225,6 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
         let destination = &Path::new(dist_base);
         let dist_files = DistFiles::new(destination, &arch, entries, origin, bugs)?;
         dist_files.check_for_duplicates()?;
-        dist_files.compress()?;
-        write_release_file(config, destination, arch)
+        dist_files.compress_and_release(config)
     }).collect()
 }
