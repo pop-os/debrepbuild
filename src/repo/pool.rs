@@ -2,12 +2,20 @@ use std::{io, fs};
 use std::path::{Path, PathBuf};
 use misc;
 
-pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str, keep_source: bool) -> io::Result<()> {
-    pool(path.as_ref(), archive, |src, dst| if keep_source || !is_source(src) {
-        fs::rename(src, dst)
-    } else {
-        fs::remove_file(src)
-    })
+pub const KEEP_SOURCE: u8 = 1;
+pub const ARCHIVES_ONLY: u8 = 2;
+
+pub fn mv_to_pool<P: AsRef<Path>>(path: P, archive: &str, flags: u8) -> io::Result<()> {
+    pool(
+        path.as_ref(),
+        archive,
+        flags,
+        |src, dst| if flags & KEEP_SOURCE != 0 || !is_source(src) {
+            fs::rename(src, dst)
+        } else {
+            fs::remove_file(src)
+        }
+    )
 }
 
 fn is_source(src: &Path) -> bool {
@@ -15,14 +23,25 @@ fn is_source(src: &Path) -> bool {
     path.ends_with(".dsc") || path.ends_with(".tar.gz") || path.ends_with(".tar.xz")
 }
 
-fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(path: &Path, archive: &str, action: F) -> io::Result<()> {
+fn is_archive(src: &Path) -> bool {
+    let path = src.to_str().unwrap();
+    path.ends_with(".deb") || path.ends_with(".ddeb")
+}
+
+fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
+    path: &Path,
+    archive: &str,
+    flags: u8,
+    action: F
+) -> io::Result<()> {
     for entry in path.read_dir()? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
+        if path.is_dir() || !(flags & ARCHIVES_ONLY != 0 && is_archive(&path)) {
             continue;
         }
 
+        info!("migrating {} to pool", path.display());
         let filename = path.file_name().and_then(|x| x.to_str());
         let filestem = path.file_stem().and_then(|x| x.to_str());
 
