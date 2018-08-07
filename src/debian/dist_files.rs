@@ -21,7 +21,7 @@ impl<'a> DistFiles<'a> {
         arch: &'a str,
         entries: Entries,
         origin: &str,
-        bugs: &str,
+        bugs: Option<&str>,
     ) -> io::Result<Self> {
         let mut combined_capacity = 0;
         let mut contents_packages = Vec::with_capacity(entries.len());

@@ -150,7 +150,6 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
     let branch_name = "main";
 
     let origin = &config.origin;
-    let bugs = "";
     
     suites.par_iter().map(|&(ref arch, ref path)| {
         // Collects a list of deb packages to read, and then reads them in parallel.
@@ -223,7 +222,7 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
 
 
         let destination = &Path::new(dist_base);
-        let dist_files = DistFiles::new(destination, &arch, entries, origin, bugs)?;
+        let dist_files = DistFiles::new(destination, &arch, entries, origin, None)?;
         dist_files.check_for_duplicates()?;
         dist_files.compress_and_release(config)
     }).collect()

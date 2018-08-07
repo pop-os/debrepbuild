@@ -14,7 +14,7 @@ pub struct PackageEntry {
 }
 
 impl PackageEntry {
-    pub fn generate_entry(mut self, origin: &str, bugs: &str) -> io::Result<Vec<u8>> {
+    pub fn generate_entry(mut self, origin: &str, bugs: Option<&str>) -> io::Result<Vec<u8>> {
         let mut output = Vec::with_capacity(1024);
         let control = &mut self.control;
 
@@ -64,7 +64,9 @@ impl PackageEntry {
         optional_map!("Suggests");
         optional_map!("Conflicts");
         write_entry!("Origin", origin.as_bytes());
-        write_entry!("Bugs", bugs.as_bytes());
+        if let Some(bugs) = bugs {
+            write_entry!("Bugs", bugs.as_bytes());
+        }
         write_entry!("Filename", self.filename.as_os_str().as_bytes());
         write_entry!("Size", self.size.to_string().as_bytes());
         write_entry!("Md5Sum", self.md5sum.as_bytes());
