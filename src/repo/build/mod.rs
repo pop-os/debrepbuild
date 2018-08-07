@@ -1,5 +1,6 @@
 mod artifacts;
 mod extract;
+mod metapackages;
 mod rsync;
 
 use super::super::SHARED_ASSETS;
@@ -9,7 +10,7 @@ use self::rsync::rsync;
 use config::{Config, DebianPath, Source, SourceLocation};
 use glob::glob;
 use misc;
-use super::pool::mv_to_pool;
+use super::pool::{mv_to_pool, KEEP_SOURCE};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -27,6 +28,11 @@ pub fn all(config: &Config) {
                 exit(1);
             }
         }
+    }
+
+    if let Err(why) = metapackages::generate(&config.archive) {
+        error!("metapackage generation failed: {}", why);
+        exit(1);
     }
 }
 
@@ -190,7 +196,7 @@ pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(),
     )?;
 
     let _ = env::set_current_dir("..");
-    mv_to_pool("build", branch, item.keep_source)
+    mv_to_pool("build", branch, if item.keep_source { KEEP_SOURCE } else { 0 })
         .map_err(|why| BuildError::Pool { package: item.name.clone(), why })
 }
 

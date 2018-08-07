@@ -21,7 +21,7 @@ impl<'a> DistFiles<'a> {
         arch: &'a str,
         entries: Entries,
         origin: &str,
-        bugs: &str,
+        bugs: Option<&str>,
     ) -> io::Result<Self> {
         let mut combined_capacity = 0;
         let mut contents_packages = Vec::with_capacity(entries.len());
@@ -99,7 +99,7 @@ impl<'a> DistFiles<'a> {
 
         let (content_res, package_res) = rayon::join(
             || compress(&["Contents-", arch].concat(), path, contents_reader, GZ_COMPRESS | XZ_COMPRESS),
-            || compress("Packages", binary_path, packages_reader, GZ_COMPRESS | XZ_COMPRESS)
+            || compress("Packages", binary_path, packages_reader, UNCOMPRESSED| GZ_COMPRESS | XZ_COMPRESS)
         );
 
         content_res.map_err(|why| io::Error::new(
