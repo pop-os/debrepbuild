@@ -8,6 +8,7 @@ use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
 use super::version::{changelog, git};
 use self::rsync::rsync;
 use config::{Config, DebianPath, Source, SourceLocation};
+use debian;
 use glob::glob;
 use misc;
 use super::pool::{mv_to_pool, KEEP_SOURCE};
@@ -16,21 +17,21 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
-use subprocess::{Exec, Redirection};
+use subprocess::{self, Exec, Redirection};
 use walkdir::WalkDir;
 
 pub fn all(config: &Config) {
     let pwd = env::current_dir().unwrap();
     if let Some(ref sources) = config.source {
         for source in sources {
-            if let Err(why) = build(source, &pwd, &config.archive, false) {
+            if let Err(why) = build(source, &pwd, &config.archive, &config.default_branch, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
         }
     }
 
-    if let Err(why) = metapackages::generate(&config.archive) {
+    if let Err(why) = metapackages::generate(&config.archive, &config.default_branch) {
         error!("metapackage generation failed: {}", why);
         exit(1);
     }
@@ -42,7 +43,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
     match config.source.as_ref() {
         Some(items) => {
             for item in items.into_iter().filter(|item| packages.contains(&item.name.as_str())) {
-                if let Err(why) = build(item, &pwd, &config.archive, force) {
+                if let Err(why) = build(item, &pwd, &config.archive, &config.default_branch, force) {
                     error!("package '{}' failed to build: {}", item.name, why);
                     exit(1);
                 }
@@ -59,14 +60,16 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
 
 #[derive(Debug, Fail)]
 pub enum BuildError {
-    #[fail(display = "build failed for {}", package)]
-    Build { package: String },
+    #[fail(display = "command for {} failed due to {:?}", package, reason)]
+    Build { package: String, reason: subprocess::ExitStatus },
     #[fail(display = "failed to get changelog for {}: {}", package, why)]
     Changelog { package: String, why: io::Error },
     #[fail(display = "{} command failed to execute: {}", cmd, why)]
     Command { cmd: &'static str, why: io::Error },
     #[fail(display = "unsupported conditional build rule: {}", rule)]
     ConditionalRule { rule: String },
+    #[fail(display = "failed to create missing debian files for {:?}: {}", path, why)]
+    DebFile { path: PathBuf, why: io::Error },
     #[fail(display = "failed to create directory for {:?}: {}", path, why)]
     Directory { path: PathBuf, why: io::Error },
     #[fail(display = "failed to extract {:?} to {:?}: {}", src, dst, why)]
@@ -123,7 +126,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(), BuildError> {
+pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
 
@@ -178,7 +181,13 @@ pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(),
                 rsync(&debian_path, &project_debian_path)
                     .map_err(|why| BuildError::Rsync {
                         src: debian_path,
-                        dst: project_debian_path,
+                        dst: project_debian_path.clone(),
+                        why
+                    })?;
+
+                debian::create_missing_files(&project_debian_path)
+                    .map_err(|why| BuildError::DebFile {
+                        path: project_debian_path,
                         why
                     })?;
             }
@@ -190,13 +199,14 @@ pub fn build(item: &Source, pwd: &Path, branch: &str, force: bool) -> Result<(),
     pre_flight(
         item,
         &pwd,
+        suite,
         branch,
         &project_directory,
         force,
     )?;
 
     let _ = env::set_current_dir("..");
-    mv_to_pool("build", branch, if item.keep_source { KEEP_SOURCE } else { 0 })
+    mv_to_pool("build", suite, branch, if item.keep_source { KEEP_SOURCE } else { 0 })
         .map_err(|why| BuildError::Pool { package: item.name.clone(), why })
 }
 
@@ -217,6 +227,7 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
 fn pre_flight(
     item: &Source,
     pwd: &Path,
+    suite: &str,
     branch: &str,
     dir: &Path,
     force: bool
@@ -306,7 +317,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(item, &pwd, branch, dir)?;
+    sbuild(item, &pwd, suite, branch, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -330,12 +341,13 @@ fn pre_flight(
 fn sbuild<P: AsRef<Path>>(
     item: &Source,
     pwd: &Path,
+    suite: &str,
     branch: &str,
     path: P,
 ) -> Result<(), BuildError> {
     let log_path = pwd.join(["logs/", &item.name].concat());
     let mut command = Exec::cmd("sbuild")
-        .args(&["-v", "--log-external-command-output", "--log-external-command-error", "-d", branch])
+        .args(&["-v", "--log-external-command-output", "--log-external-command-error", "-d", suite])
         .stdout(Redirection::Merge)
         .stderr(Redirection::File(
             fs::OpenOptions::new()
@@ -347,7 +359,7 @@ fn sbuild<P: AsRef<Path>>(
         ));
 
     if let Some(ref depends) = item.depends {
-        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", branch, "/main"].concat()), false)
+        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", branch].concat()), false)
             .flat_map(|deb| misc::match_deb(&deb, depends))
             .collect::<Vec<(String, usize)>>();
 
@@ -385,6 +397,9 @@ fn sbuild<P: AsRef<Path>>(
     if exit_status.success() {
         Ok(())
     } else {
-        Err(BuildError::Build { package: item.name.clone() })
+        Err(BuildError::Build {
+            package: item.name.clone(),
+            reason: exit_status
+        })
     }
 }

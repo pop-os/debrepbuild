@@ -1,9 +1,11 @@
 pub mod archive;
 pub mod dist_files;
+pub mod files;
 pub mod package;
 
 pub use self::archive::*;
 pub use self::dist_files::*;
+pub use self::files::*;
 pub use self::package::*;
 
 use std::collections::BTreeMap;

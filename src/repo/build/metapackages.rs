@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
 
-pub fn generate(suite: &str) -> io::Result<()> {
+pub fn generate(suite: &str, branch: &str) -> io::Result<()> {
     info!("generating metapackages");
     WalkDir::new("metapackages")
         .min_depth(2)
@@ -19,8 +19,8 @@ pub fn generate(suite: &str) -> io::Result<()> {
             )).and_then(inner_generate)
         })
         .collect::<io::Result<()>>()?;
-    
-    mv_to_pool("metapackages", suite, ARCHIVES_ONLY)
+
+    mv_to_pool("metapackages", suite, branch, ARCHIVES_ONLY)
 }
 
 fn is_cfg(entry: &DirEntry) -> bool {
@@ -37,7 +37,7 @@ fn inner_generate(entry: DirEntry) -> io::Result<()> {
         format!("parent path not found from {}", path.display())
     ))?;
 
-    DirectorySwitcher::new(parent, move || {
+    directory_scope(parent, move || {
         let status = Command::new("equivs-build")
             .arg(filename)
             .status()?;
@@ -53,16 +53,10 @@ fn inner_generate(entry: DirEntry) -> io::Result<()> {
     })
 }
 
-struct DirectorySwitcher {
-    previous: PathBuf,
-}
-
-impl DirectorySwitcher {
-    pub fn new<T, F: FnMut() -> io::Result<T>>(path: &Path, mut scope: F) -> io::Result<T> {
-        let previous = env::current_dir()?;
-        env::set_current_dir(path)?;
-        let result = scope()?;
-        env::set_current_dir(previous)?;
-        Ok(result)
-    }
+pub fn directory_scope<T, F: FnMut() -> io::Result<T>>(path: &Path, mut scope: F) -> io::Result<T> {
+    let previous = env::current_dir()?;
+    env::set_current_dir(path)?;
+    let result = scope()?;
+    env::set_current_dir(previous)?;
+    Ok(result)
 }

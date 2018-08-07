@@ -16,9 +16,9 @@ use debian::*;
 
 use compress::*;
 
-pub(crate) fn sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> {
+pub(crate) fn sources_index(branch: &str, dist_base: &str, pool_base: &str) -> io::Result<()> {
     info!("generating sources index");
-    let path = PathBuf::from([dist_base, "/main/source/"].concat());
+    let path = PathBuf::from([dist_base, "/", branch, "/source/"].concat());
     fs::create_dir_all(&path)?;
 
     Command::new("apt-ftparchive")
@@ -32,7 +32,7 @@ pub(crate) fn sources_index(dist_base: &str, pool_base: &str) -> io::Result<()> 
                 let stdout = child.stdout.as_mut().unwrap();
                 compress("Sources", &path, stdout, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)?;
             }
-            
+
             child.wait().and_then(|stat| {
                 if stat.success() {
                     Ok(())
@@ -76,7 +76,7 @@ pub(crate) fn dists_release(config: &Config, base: &str) -> io::Result<()> {
         .arg("-o")
         .arg("APT::FTPArchive::Release::Architectures=i386 amd64 all")
         .arg("-o")
-        .arg("APT::FTPArchive::Release::Components=main")
+        .arg(["APT::FTPArchive::Release::Components=", &config.default_branch].concat())
         .arg("-o")
         .arg(format!(
             "APT::FTPArchive::Release::Description={} ({} {})",
@@ -147,10 +147,10 @@ pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> 
 
 pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, PathBuf)]) -> io::Result<()> {
     info!("generating content archives");
-    let branch_name = "main";
 
+    let branch = &config.default_branch;
     let origin = &config.origin;
-    
+
     suites.par_iter().map(|&(ref arch, ref path)| {
         // Collects a list of deb packages to read, and then reads them in parallel.
         let entries: Vec<io::Result<(PackageEntry, ContentsEntry)>> = misc::walk_debs(&path, true)
@@ -165,11 +165,11 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
                 let archive = DebianArchive::new(&debian_entry)?;
                 // Open the control file within the control archive and read each key / value pair into a map.
                 let control = archive.control()?;
-                
+
                 // The Contents archive requires that we know the package and section keys for each Debian package beforehand.
                 let package_name = match (control.get("Package"), control.get("Section")) {
-                    (Some(ref package), Some(ref section)) if branch_name == "main" => [section, "/", package].concat(),
-                    (Some(ref package), Some(ref section)) => [branch_name, "/", section, "/", package].concat(),
+                    (Some(ref package), Some(ref section)) if branch == "main" => [section, "/", package].concat(),
+                    (Some(ref package), Some(ref section)) => [branch, "/", section, "/", package].concat(),
                     _ => {
                         return Err(io::Error::new(
                             io::ErrorKind::Other,
@@ -196,7 +196,7 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
                             )
                         )
                     };
-                
+
                     rayon::join(
                         || archive.data(|path| files.push(path.to_path_buf())),
                         generate_hashes

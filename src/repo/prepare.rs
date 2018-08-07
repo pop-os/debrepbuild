@@ -15,7 +15,7 @@ pub fn create_missing_directories() -> io::Result<()> {
 }
 
 pub fn package_cleanup(config: &Config) -> io::Result<()> {
-    let path = PathBuf::from(["repo/pool/", &config.archive, "/main"].concat());
+    let path = PathBuf::from(["repo/pool/", &config.archive, "/", &config.default_branch].concat());
     for entry in WalkDir::new(path).min_depth(3).max_depth(3).into_iter().filter_map(|x| x.ok()) {
         let path = entry.path();
         if let Some(filename) = path.file_name().and_then(|x| x.to_str()) {
@@ -49,8 +49,8 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
     Ok(())
 }
 
-pub fn remove(packages: &[&str], archive: &str) -> io::Result<()> {
-    let path = PathBuf::from(["repo/pool/", archive, "/main"].concat());
+pub fn remove(packages: &[&str], suite: &str, branch: &str) -> io::Result<()> {
+    let path = PathBuf::from(["repo/pool/", suite, "/", branch].concat());
     for entry in WalkDir::new(path).min_depth(3).max_depth(3).into_iter().filter_map(|x| x.ok()) {
         let path = entry.path();
         if let Some(filename) = path.file_name().and_then(|x| x.to_str()) {

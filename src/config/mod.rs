@@ -45,6 +45,8 @@ pub struct Config {
     pub direct: Option<Vec<Direct>>,
     /// Projects which can be built from source
     pub source: Option<Vec<Source>>,
+    #[serde(default = "default_branch")]
+    pub default_branch: String,
 }
 
 impl Config {
@@ -78,6 +80,8 @@ impl Config {
         self.direct_exists(filename) || self.source_exists(filename)
     }
 }
+
+fn default_branch() -> String { "main".into() }
 
 /// Methods for fetching and updating values from the in-memory representation of the TOML spec.
 pub trait ConfigFetch {

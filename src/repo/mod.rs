@@ -70,7 +70,7 @@ impl<'a> Repo<'a> {
 
     pub fn remove(self) -> Self {
         if let Packages::Select(ref packages, _) = self.packages {
-            if let Err(why) = prepare::remove(packages, &self.config.archive) {
+            if let Err(why) = prepare::remove(packages, &self.config.archive, &self.config.default_branch) {
                 error!("failed to remove file: {}", why);
                 exit(1);
             }
@@ -102,10 +102,10 @@ pub enum ReleaseError {
 fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
     let base = ["dists/", &sources.archive].concat();
-    let pool = ["pool/", &sources.archive, "/main"].concat();
+    let pool = ["pool/", &sources.archive, "/", &sources.default_branch].concat();
 
     for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
-        let _ = fs::create_dir_all([&base, "/main/", arch].concat());
+        let _ = fs::create_dir_all([&base, "/", &sources.default_branch, "/", arch].concat());
     }
 
     let release = PathBuf::from([&base, "/Release"].concat());
@@ -117,11 +117,12 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
 
     let mut sources_result = Ok(());
     let mut contents_result = Ok(());
+    let branch = &sources.default_branch;
 
     rayon::scope(|s| {
         // Generate Sources archives
         s.spawn(|_| {
-            sources_result = generate::sources_index(&base, &pool)
+            sources_result = generate::sources_index(branch, &base, &pool)
                 .map_err(|why| ReleaseError::Source { why });
         });
 
