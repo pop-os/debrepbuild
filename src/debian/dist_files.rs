@@ -53,11 +53,10 @@ impl<'a> DistFiles<'a> {
         Ok(DistFiles { path, arch, packages, contents })
     }
 
-    pub fn check_for_duplicates(&self) -> io::Result<()> {
-        self.inner_check_for_duplicates().map_err(|why| io::Error::new(
-            io::ErrorKind::Other,
-            format!("duplicate entry found in {}: {}", self.path.display(), why)
-        ))
+    pub fn check_for_duplicates(&self) {
+        if let Err(why) = self.inner_check_for_duplicates() {
+            warn!("duplicate entry found in {}: {}", self.path.display(), why);
+        }
     }
 
     fn inner_check_for_duplicates(&self) -> io::Result<()> {
