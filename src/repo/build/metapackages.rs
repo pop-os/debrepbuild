@@ -40,9 +40,14 @@ fn inner_generate(entry: DirEntry) -> io::Result<()> {
     directory_scope(parent, move || {
         let status = Command::new("equivs-build")
             .arg(filename)
-            .status()?;
+            .status()
+            .map_err(|why| Error::new(
+                ErrorKind::Other,
+                format!("equivs-build failed to run: {}", why)
+            ))?;
 
         if status.success() {
+            debug!("equivs-build succeeded for metapackage: {}", path.display());
             Ok(())
         } else {
             Err(status.code().map_or_else(
