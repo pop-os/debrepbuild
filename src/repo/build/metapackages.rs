@@ -1,15 +1,15 @@
 use std::env;
 use std::io::{self, Error, ErrorKind};
 use std::process::Command;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
 
 pub fn generate(suite: &str, branch: &str) -> io::Result<()> {
     info!("generating metapackages");
     WalkDir::new("metapackages")
-        .min_depth(2)
-        .max_depth(2)
+        .min_depth(1)
+        .max_depth(1)
         .into_iter()
         .filter_entry(|e| is_cfg(e))
         .map(|e| {

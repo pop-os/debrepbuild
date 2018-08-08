@@ -187,12 +187,12 @@ pub(crate) fn contents(config: &Config, dist_base: &str, suites: &[(String, Path
                     let generate_hashes = || {
                         rayon::join(
                             || rayon::join(
-                                || File::open(path).and_then(|f| hasher::<Sha1, File>(f)),
-                                || File::open(path).and_then(|f| hasher::<Sha256, File>(f)),
+                                || File::open(path).and_then(hasher::<Sha1, File>),
+                                || File::open(path).and_then(hasher::<Sha256, File>),
                             ),
                             || rayon::join(
-                                || File::open(path).and_then(|f| hasher::<Sha512, File>(f)),
-                                || File::open(path).and_then(|f| hasher::<Md5, File>(f)),
+                                || File::open(path).and_then(hasher::<Sha512, File>),
+                                || File::open(path).and_then(hasher::<Md5, File>),
                             )
                         )
                     };

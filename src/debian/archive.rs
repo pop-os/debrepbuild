@@ -49,7 +49,7 @@ impl<'a> DebianArchive<'a> {
             io::ErrorKind::InvalidData,
             format!("control archive not found in {}", path.display())
         ))?;
-        
+
         Ok(DebianArchive { path, control, data })
     }
 
@@ -103,7 +103,7 @@ impl<'a> DebianArchive<'a> {
             let mut entry = entry?;
             let path = entry.path()?.to_path_buf();
 
-            if &path == control_file {
+            if path == control_file {
                 let mut description_unset = true;
                 let mut lines = BufReader::new(&mut entry).lines().peekable();
                 while let Some(line) = lines.next() {
@@ -111,7 +111,7 @@ impl<'a> DebianArchive<'a> {
                     if let Some(pos) = line.find(':') {
                         let (key, value) = line.split_at(pos);
                         let mut value: String = value[1..].trim().to_owned();
-                        
+
                         if description_unset && key == "Description" {
                             description_unset = false;
                             loop {

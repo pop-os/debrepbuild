@@ -25,25 +25,23 @@ impl PackageEntry {
             ))
         }
 
-        macro_rules! write_entry {
-            ($key:expr, $value:expr) => {{
-                output.extend_from_slice($key.as_bytes());
-                output.extend_from_slice(b": ");
-                output.extend_from_slice($value);
-                output.push(b'\n');
-            }};
+        fn write_entry(output: &mut Vec<u8>, key: &[u8], value: &[u8]) {
+            output.extend_from_slice(key);
+            output.extend_from_slice(b": ");
+            output.extend_from_slice(value);
+            output.push(b'\n');
         }
 
         macro_rules! write_from_map {
             ($key:expr) => {
-                 write_entry!($key, get_key(control, $key)?.as_bytes());
+                 write_entry(&mut output, $key.as_bytes(), get_key(control, $key)?.as_bytes());
             }
         }
 
         macro_rules! optional_map {
             ($key:expr) => {
                 if let Some(value) = control.remove($key) {
-                    write_entry!($key, value.as_bytes())
+                    write_entry(&mut output, $key.as_bytes(), value.as_bytes())
                 }
             };
         }
@@ -63,16 +61,16 @@ impl PackageEntry {
         optional_map!("Recommends");
         optional_map!("Suggests");
         optional_map!("Conflicts");
-        write_entry!("Origin", origin.as_bytes());
+        write_entry(&mut output, b"Origin", origin.as_bytes());
         if let Some(bugs) = bugs {
-            write_entry!("Bugs", bugs.as_bytes());
+            write_entry(&mut output, b"Bugs", bugs.as_bytes());
         }
-        write_entry!("Filename", self.filename.as_os_str().as_bytes());
-        write_entry!("Size", self.size.to_string().as_bytes());
-        write_entry!("Md5Sum", self.md5sum.as_bytes());
-        write_entry!("SHA1", self.sha1.as_bytes());
-        write_entry!("SHA256", self.sha256.as_bytes());
-        write_entry!("SHA512", self.sha512.as_bytes());
+        write_entry(&mut output, b"Filename", self.filename.as_os_str().as_bytes());
+        write_entry(&mut output, b"Size", self.size.to_string().as_bytes());
+        write_entry(&mut output, b"Md5Sum", self.md5sum.as_bytes());
+        write_entry(&mut output, b"SHA1", self.sha1.as_bytes());
+        write_entry(&mut output, b"SHA256", self.sha256.as_bytes());
+        write_entry(&mut output, b"SHA512", self.sha512.as_bytes());
         optional_map!("Homepage");
         optional_map!("Description");
         optional_map!("License");

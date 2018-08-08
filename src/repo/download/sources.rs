@@ -34,7 +34,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 
     let requires_download = if destination.is_file() {
         let digest = File::open(&destination)
-            .and_then(|f| hasher::<Sha256, File>(f))
+            .and_then(hasher::<Sha256, File>)
             .map_err(|why| DownloadError::Open {
                 file: destination.clone(),
                 why
@@ -58,7 +58,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
     }
 
     let digest = File::open(&destination)
-        .and_then(|f| hasher::<Sha256, File>(f))
+        .and_then(hasher::<Sha256, File>)
         .map_err(|why| DownloadError::Open {
             file: destination.clone(),
             why
