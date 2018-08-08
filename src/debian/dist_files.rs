@@ -41,7 +41,7 @@ impl<'a> DistFiles<'a> {
         }
 
         let mut contents = Vec::with_capacity(combined_capacity);
-        
+
         for entry in contents_packages {
             for path in entry.files {
                 contents.push((path, entry.package.clone()));
@@ -98,7 +98,7 @@ impl<'a> DistFiles<'a> {
         });
 
         let (content_res, package_res) = rayon::join(
-            || compress(&["Contents-", arch].concat(), path, contents_reader, GZ_COMPRESS | XZ_COMPRESS),
+            || compress(&["Contents-", arch].concat(), path, contents_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS),
             || compress("Packages", binary_path, packages_reader, UNCOMPRESSED| GZ_COMPRESS | XZ_COMPRESS)
         );
 
