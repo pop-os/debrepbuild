@@ -117,6 +117,22 @@ fn main() {
         ).subcommand(SubCommand::with_name("update")
             .about("Updates direct download-based packages in the configuration")
             .alias("u")
+        ).subcommand(SubCommand::with_name("migrate")
+            .about("Moves a package from one branch to another, updating both branches in the process")
+            .alias("m")
+            .arg(Arg::with_name("packages")
+                .multiple(true)
+                .required(true))
+            .arg(Arg::with_name("from")
+                .help("specifies the branch which packages are being moved from")
+                .long("from")
+                .takes_value(true)
+                .required(true))
+            .arg(Arg::with_name("to")
+                .help("specifies the branch which packages are being moved to")
+                .long("to")
+                .takes_value(true)
+                .required(true))
         ).get_matches();
 
     match config::parse() {
@@ -135,12 +151,6 @@ fn main() {
                 Action::Dist => {
                     Repo::prepare(sources, Packages::All).generate();
                 },
-                Action::UpdateRepository => {
-                    Repo::prepare(sources, Packages::All)
-                        .download()
-                        .build()
-                        .generate();
-                },
                 Action::Fetch(key) => match sources.fetch(&key) {
                     Some(value) => println!("{}: {}", key, value),
                     None => {
@@ -149,6 +159,10 @@ fn main() {
                     }
                 },
                 Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
+                Action::Migrate(packages, from_branch, to_branch) => {
+                    info!("migrating {:?} from {} to {}", packages, from_branch, to_branch);
+                    unimplemented!();
+                },
                 Action::Pool => {
                     Repo::prepare(sources, Packages::All).download();
                 },
@@ -168,6 +182,12 @@ fn main() {
                         exit(1);
                     }
                 },
+                Action::UpdateRepository => {
+                    Repo::prepare(sources, Packages::All)
+                        .download()
+                        .build()
+                        .generate();
+                }
             }
         },
         Err(why) => {
