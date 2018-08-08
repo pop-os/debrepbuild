@@ -13,7 +13,7 @@ use reqwest::{self, Client};
 pub fn all(config: &Config) {
     let mut package_failed = false;
     if let Some(ref ddl_sources) = config.direct {
-        for (id, result) in direct::parallel(ddl_sources, &config.archive)
+        for (id, result) in direct::parallel(ddl_sources, &config.archive, &config.default_branch)
             .into_iter()
             .enumerate()
         {
@@ -60,7 +60,7 @@ pub fn packages(sources: &Config, packages: &[&str]) {
 
     if let Some(ref source) = sources.direct.as_ref() {
         for source in source.iter().filter(|s| packages.contains(&s.name.as_str())) {
-            if let Err(why) = direct::download(&Client::new(), source, &sources.archive) {
+            if let Err(why) = direct::download(&Client::new(), source, &sources.archive, &sources.default_branch) {
                 error!("failed to download {}: {}", &source.name, why);
                 exit(1);
             }

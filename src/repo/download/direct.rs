@@ -14,7 +14,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<DownloadResult> {
+pub fn download(client: &Client, item: &Direct, suite: &str, branch: &str) -> io::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
     fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
@@ -59,12 +59,12 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
             let filename = &gen_filename(name, &item.version, arch, extension);
 
             let dst = match extension {
-                "tar.gz" | "tar.xz" | "dsc" => "/main/source/".into(),
-                _ => ["/main/binary-", arch, "/"].concat()
+                "tar.gz" | "tar.xz" | "dsc" => ["/", branch, "/source/"].concat(),
+                _ => ["/", branch, "/binary-", arch, "/"].concat()
             };
 
             PathBuf::from(
-                [ "repo/pool/", branch, &dst, &name[0..1], "/", name, "/", &filename ].concat()
+                [ "repo/pool/", suite, &dst, &name[0..1], "/", name, "/", &filename ].concat()
             )
         };
 
@@ -77,10 +77,10 @@ pub fn download(client: &Client, item: &Direct, branch: &str) -> io::Result<Down
 }
 
 /// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct], branch: &str) -> Vec<io::Result<DownloadResult>> {
+pub fn parallel(items: &[Direct], suite: &str, branch: &str) -> Vec<io::Result<DownloadResult>> {
     let client = Client::new();
     items
         .par_iter()
-        .map(|item| download(&client, item, branch))
+        .map(|item| download(&client, item, suite, branch))
         .collect()
 }

@@ -8,6 +8,7 @@ pub enum Action<'a> {
     Dist,
     Fetch(&'a str),
     FetchConfig,
+    Migrate(Vec<&'a str>, &'a str, &'a str),
     Pool,
     Remove(Vec<&'a str>),
     Update(&'a str, &'a str),
@@ -35,6 +36,13 @@ impl<'a> Action<'a> {
             }
             ("remove", Some(pkgs)) => {
                 Action::Remove(pkgs.values_of("packages").unwrap().collect())
+            }
+            ("migrate", Some(migrate)) => {
+                Action::Migrate(
+                    migrate.values_of("packages").unwrap().collect(),
+                    migrate.value_of("from").unwrap(),
+                    migrate.value_of("to").unwrap()
+                )
             }
             _ => unreachable!()
         }
