@@ -29,6 +29,8 @@ pub fn all(config: &Config) {
                 exit(1);
             }
         }
+
+        migrate_to_pool(config, sources.iter());
     }
 
     if let Err(why) = metapackages::generate(&config.archive, &config.default_branch) {
@@ -42,7 +44,11 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
     let mut built = 0;
     match config.source.as_ref() {
         Some(items) => {
-            for item in items.into_iter().filter(|item| packages.contains(&item.name.as_str())) {
+            let sources = items.into_iter()
+                .filter(|item| packages.contains(&item.name.as_str()))
+                .collect::<Vec<&Source>>();
+
+            for item in &sources {
                 if let Err(why) = build(item, &pwd, &config.archive, &config.default_branch, force) {
                     error!("package '{}' failed to build: {}", item.name, why);
                     exit(1);
@@ -53,8 +59,25 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                     break
                 }
             }
+
+            migrate_to_pool(config, sources.into_iter());
         },
         None => warn!("no packages built")
+    }
+}
+
+fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources: I) {
+    for source in sources {
+        if let Err(why) = mv_to_pool(
+            "build",
+            &config.archive,
+            &config.default_branch,
+            if source.keep_source { KEEP_SOURCE } else { 0 },
+            Some(&source.name)
+        ) {
+            error!("package '{}' failed to migrate to pool: {}", source.name, why);
+            exit(1);
+        }
     }
 }
 
@@ -206,8 +229,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) 
     )?;
 
     let _ = env::set_current_dir("..");
-    mv_to_pool("build", suite, branch, if item.keep_source { KEEP_SOURCE } else { 0 })
-        .map_err(|why| BuildError::Pool { package: item.name.clone(), why })
+    Ok(())
 }
 
 fn merge_branch(url: &str, branch: &str) -> io::Result<()> {

@@ -5,7 +5,8 @@ use misc;
 pub const KEEP_SOURCE: u8 = 1;
 pub const ARCHIVES_ONLY: u8 = 2;
 
-pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, branch: &str, flags: u8) -> io::Result<()> {
+pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, branch: &str, flags: u8, filter: Option<&str>) -> io::Result<()> {
+    info!("moving items in {} to pool at {}/{}", path.as_ref().display(), suite, branch);
     pool(
         path.as_ref(),
         suite,
@@ -15,7 +16,8 @@ pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, branch: &str, flags: u8)
             fs::rename(src, dst)
         } else {
             fs::remove_file(src)
-        }
+        },
+        filter
     )
 }
 
@@ -34,20 +36,29 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
     suite: &str,
     branch: &str,
     flags: u8,
-    action: F
+    action: F,
+    filter: Option<&str>,
 ) -> io::Result<()> {
     for entry in path.read_dir()? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() || !(flags & ARCHIVES_ONLY != 0 && is_archive(&path)) {
+        eprintln!("found {}", path.display());
+        if path.is_dir() || (flags & ARCHIVES_ONLY != 0 && !is_archive(&path)) {
             continue;
         }
-
-        info!("migrating {} to pool", path.display());
         let filename = path.file_name().and_then(|x| x.to_str());
         let filestem = path.file_stem().and_then(|x| x.to_str());
 
         if let (Some(filename), Some(filestem)) = (filename, filestem) {
+            if let Some(name) = filter {
+                if !(filename.starts_with(&[name, "_"].concat())
+                    || filename.starts_with(&[name, "-dbgsym_"].concat()))
+                {
+                    continue
+                }
+            }
+
+            info!("migrating {} to pool", path.display());
             let mut package = &filename[..filename.find('_').unwrap_or(0)];
 
             let is_source = ["dsc", "tar.xz", "tar.gz"].into_iter().any(|ext| filename.ends_with(ext));

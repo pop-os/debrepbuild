@@ -20,7 +20,7 @@ pub fn generate(suite: &str, branch: &str) -> io::Result<()> {
         })
         .collect::<io::Result<()>>()?;
 
-    mv_to_pool("metapackages", suite, branch, ARCHIVES_ONLY)
+    mv_to_pool("metapackages", suite, branch, ARCHIVES_ONLY, None)
 }
 
 fn is_cfg(entry: &DirEntry) -> bool {
