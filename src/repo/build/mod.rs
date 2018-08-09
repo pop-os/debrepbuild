@@ -291,7 +291,7 @@ fn pre_flight(
             Some(Record::Changelog(version))
         }
         Some("commit") => {
-            let (component, commit) = git(dir).map_err(|why| BuildError::GitCommit {
+            let (branch, commit) = git(dir).map_err(|why| BuildError::GitCommit {
                 package: item.name.clone(),
                 why
             })?;
@@ -305,12 +305,12 @@ fn pre_flight(
 
                 if let Some(source) = record.next() {
                     if source == "commit" {
-                        for component_entry in record {
-                            let mut fields = component_entry.split_whitespace();
-                            if let (Some(rec_component), Some(rec_commit)) =
+                        for branch_entry in record {
+                            let mut fields = branch_entry.split_whitespace();
+                            if let (Some(rec_branch), Some(rec_commit)) =
                                 (fields.next(), fields.next())
                             {
-                                if rec_component == component && rec_commit == commit {
+                                if rec_branch == branch && rec_commit == commit {
                                     info!("{} has already been built -- skipping", name);
                                     return Ok(());
                                 }
@@ -322,13 +322,13 @@ fn pre_flight(
             }
 
             info!(
-                "building {} at git component {}; commit {}",
-                name, component, commit
+                "building {} at git branch {}; commit {}",
+                name, branch, commit
             );
             Some(if append {
-                Record::CommitAppend(component, commit)
+                Record::CommitAppend(branch, commit)
             } else {
-                Record::Commit(component, commit)
+                Record::Commit(branch, commit)
             })
         }
         Some(rule) => {
@@ -343,15 +343,15 @@ fn pre_flight(
         Some(Record::Changelog(version)) => {
             misc::write(record_path, ["changelog\n", &version].concat().as_bytes())
         }
-        Some(Record::Commit(component, commit)) => misc::write(
+        Some(Record::Commit(branch, commit)) => misc::write(
             record_path,
-            ["commit\n", &component, " ", &commit].concat().as_bytes(),
+            ["commit\n", &branch, " ", &commit].concat().as_bytes(),
         ),
-        Some(Record::CommitAppend(component, commit)) => OpenOptions::new()
+        Some(Record::CommitAppend(branch, commit)) => OpenOptions::new()
             .create(true)
             .append(true)
             .open(record_path)
-            .and_then(|mut file| file.write_all([&component, " ", &commit].concat().as_bytes())),
+            .and_then(|mut file| file.write_all([&branch, " ", &commit].concat().as_bytes())),
         None => return Ok(()),
     };
 
