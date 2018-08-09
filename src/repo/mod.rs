@@ -101,11 +101,42 @@ pub enum ReleaseError {
     Suites { why: io::Error }
 }
 
+// Recursively removes directories from the given path, if the directories or their subdirectories
+// are empty.
+fn remove_empty_from(directory: &Path) -> io::Result<bool> {
+    let mut empty = true;
+    for entry in directory.read_dir()? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if !remove_empty_from(&path)? {
+                empty = false;
+            }
+        } else {
+            return Ok(false);
+        }
+    }
+
+    if empty {
+        info!("removing {} because it is empty", directory.display());
+        fs::remove_dir(directory)?;
+    }
+
+    Ok(empty)
+}
+
 /// Generate the dist release files from the existing binary and source files.
 pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
+
     let base = ["dists/", &sources.archive].concat();
     let pool = ["pool/", &sources.archive, "/"].concat();
+
+    // Delete the dists directory in advance, since we will be regenerating everything.
+    let _ = fs::remove_dir_all(&base);
+    // Also delete any empty directories within the pool.
+    let _ = remove_empty_from(&Path::new(&pool));
+
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
@@ -119,7 +150,7 @@ pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
             if component.path().is_dir() {
                 let component = component.file_name();
                 let component = component.to_str().unwrap();
-                for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
+                for arch in &["binary-amd64", "binary-i386", "binary-all", "source"] {
                     let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
                 }
 
