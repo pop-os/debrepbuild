@@ -5,7 +5,7 @@ use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
 
-pub fn generate(suite: &str, branch: &str) -> io::Result<()> {
+pub fn generate(suite: &str, component: &str) -> io::Result<()> {
     info!("generating metapackages");
     WalkDir::new("metapackages")
         .min_depth(1)
@@ -20,7 +20,7 @@ pub fn generate(suite: &str, branch: &str) -> io::Result<()> {
         })
         .collect::<io::Result<()>>()?;
 
-    mv_to_pool("metapackages", suite, branch, ARCHIVES_ONLY, None)
+    mv_to_pool("metapackages", suite, component, ARCHIVES_ONLY, None)
 }
 
 fn is_cfg(entry: &DirEntry) -> bool {

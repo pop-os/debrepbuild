@@ -3,24 +3,35 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
+use debian::DEB_SOURCE_EXTENSIONS;
 
 use libc;
 use walkdir::{DirEntry, WalkDir};
 
-pub fn walk_debs(path: &Path, include_ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
-    fn is_deb(entry: &DirEntry, include_ddeb: bool) -> bool {
-        if entry.path().is_dir() {
-            true
-        } else {
-            entry.file_name().to_str().map_or(false, |e| {
-                e.ends_with(".deb") || {
-                    if include_ddeb { e.ends_with(".ddeb") } else { false }
-                }
-            })
-        }
-    }
+pub const INCLUDE_DDEB: u8 = 1;
+pub const INCLUDE_SRCS: u8 = 2;
 
-    Box::new(WalkDir::new(path).into_iter().filter_entry(move |e| is_deb(e, include_ddeb)).flat_map(|e| e.ok()))
+pub fn is_deb(entry: &DirEntry, flags: u8) -> bool {
+    entry.file_name().to_str().map_or(false, |e| {
+        e.ends_with(".deb") || {
+            if flags & INCLUDE_DDEB != 0 { e.ends_with(".ddeb") } else { false }
+        } || {
+            if flags & INCLUDE_SRCS != 0 {
+                DEB_SOURCE_EXTENSIONS.into_iter().any(|ext| e.ends_with(ext))
+            } else {
+                false
+            }
+        }
+    })
+}
+
+pub fn walk_debs(path: &Path, ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
+    Box::new(
+        WalkDir::new(path)
+            .into_iter()
+            .filter_entry(move |e| if e.path().is_dir() { true } else { is_deb(e, ddeb as u8) })
+            .flat_map(|e| e.ok())
+    )
 }
 
 pub fn match_deb(entry: &DirEntry, packages: &[String]) -> Option<(String, usize)> {

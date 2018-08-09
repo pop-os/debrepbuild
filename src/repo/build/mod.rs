@@ -24,7 +24,7 @@ pub fn all(config: &Config) {
     let pwd = env::current_dir().unwrap();
     if let Some(ref sources) = config.source {
         for source in sources {
-            if let Err(why) = build(source, &pwd, &config.archive, &config.default_branch, false) {
+            if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
@@ -33,7 +33,7 @@ pub fn all(config: &Config) {
         migrate_to_pool(config, sources.iter());
     }
 
-    if let Err(why) = metapackages::generate(&config.archive, &config.default_branch) {
+    if let Err(why) = metapackages::generate(&config.archive, &config.default_component) {
         error!("metapackage generation failed: {}", why);
         exit(1);
     }
@@ -49,7 +49,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                 .collect::<Vec<&Source>>();
 
             for item in &sources {
-                if let Err(why) = build(item, &pwd, &config.archive, &config.default_branch, force) {
+                if let Err(why) = build(item, &pwd, &config.archive, &config.default_component, force) {
                     error!("package '{}' failed to build: {}", item.name, why);
                     exit(1);
                 }
@@ -71,7 +71,7 @@ fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources
         if let Err(why) = mv_to_pool(
             "build",
             &config.archive,
-            &config.default_branch,
+            &config.default_component,
             if source.keep_source { KEEP_SOURCE } else { 0 },
             Some(&source.name)
         ) {
@@ -149,7 +149,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) -> Result<(), BuildError> {
+pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
 
@@ -223,7 +223,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) 
         item,
         &pwd,
         suite,
-        branch,
+        component,
         &project_directory,
         force,
     )?;
@@ -250,7 +250,7 @@ fn pre_flight(
     item: &Source,
     pwd: &Path,
     suite: &str,
-    branch: &str,
+    component: &str,
     dir: &Path,
     force: bool
 ) -> Result<(), BuildError> {
@@ -293,7 +293,7 @@ fn pre_flight(
             Some(Record::Changelog(version))
         }
         Some("commit") => {
-            let (branch, commit) = git(dir).map_err(|why| BuildError::GitCommit {
+            let (component, commit) = git(dir).map_err(|why| BuildError::GitCommit {
                 package: item.name.clone(),
                 why
             })?;
@@ -307,12 +307,12 @@ fn pre_flight(
 
                 if let Some(source) = record.next() {
                     if source == "commit" {
-                        for branch_entry in record {
-                            let mut fields = branch_entry.split_whitespace();
-                            if let (Some(rec_branch), Some(rec_commit)) =
+                        for component_entry in record {
+                            let mut fields = component_entry.split_whitespace();
+                            if let (Some(rec_component), Some(rec_commit)) =
                                 (fields.next(), fields.next())
                             {
-                                if rec_branch == branch && rec_commit == commit {
+                                if rec_component == component && rec_commit == commit {
                                     info!("{} has already been built -- skipping", name);
                                     return Ok(());
                                 }
@@ -324,13 +324,13 @@ fn pre_flight(
             }
 
             info!(
-                "building {} at git branch {}; commit {}",
-                name, branch, commit
+                "building {} at git component {}; commit {}",
+                name, component, commit
             );
             Some(if append {
-                Record::CommitAppend(branch, commit)
+                Record::CommitAppend(component, commit)
             } else {
-                Record::Commit(branch, commit)
+                Record::Commit(component, commit)
             })
         }
         Some(rule) => {
@@ -339,21 +339,21 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(item, &pwd, suite, branch, dir)?;
+    sbuild(item, &pwd, suite, component, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
             misc::write(record_path, ["changelog\n", &version].concat().as_bytes())
         }
-        Some(Record::Commit(branch, commit)) => misc::write(
+        Some(Record::Commit(component, commit)) => misc::write(
             record_path,
-            ["commit\n", &branch, " ", &commit].concat().as_bytes(),
+            ["commit\n", &component, " ", &commit].concat().as_bytes(),
         ),
-        Some(Record::CommitAppend(branch, commit)) => OpenOptions::new()
+        Some(Record::CommitAppend(component, commit)) => OpenOptions::new()
             .create(true)
             .append(true)
             .open(record_path)
-            .and_then(|mut file| file.write_all([&branch, " ", &commit].concat().as_bytes())),
+            .and_then(|mut file| file.write_all([&component, " ", &commit].concat().as_bytes())),
         None => return Ok(()),
     };
 
@@ -364,7 +364,7 @@ fn sbuild<P: AsRef<Path>>(
     item: &Source,
     pwd: &Path,
     suite: &str,
-    branch: &str,
+    component: &str,
     path: P,
 ) -> Result<(), BuildError> {
     let log_path = pwd.join(["logs/", &item.name].concat());
@@ -381,7 +381,7 @@ fn sbuild<P: AsRef<Path>>(
         ));
 
     if let Some(ref depends) = item.depends {
-        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", branch].concat()), false)
+        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", component].concat()), false)
             .flat_map(|deb| misc::match_deb(&deb, depends))
             .collect::<Vec<(String, usize)>>();
 

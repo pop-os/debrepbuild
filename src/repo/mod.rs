@@ -1,13 +1,16 @@
 mod build;
 mod download;
 mod generate;
+mod migrate;
 mod pool;
 mod prepare;
 mod version;
 
+pub use self::migrate::migrate;
+
 use config::Config;
 use rayon;
-use std::{env, fs, io};
+use std::{env, fs, io, thread};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -70,7 +73,7 @@ impl<'a> Repo<'a> {
 
     pub fn remove(self) -> Self {
         if let Packages::Select(ref packages, _) = self.packages {
-            if let Err(why) = prepare::remove(packages, &self.config.archive, &self.config.default_branch) {
+            if let Err(why) = prepare::remove(packages, &self.config.archive, &self.config.default_component) {
                 error!("failed to remove file: {}", why);
                 exit(1);
             }
@@ -99,43 +102,49 @@ pub enum ReleaseError {
 }
 
 /// Generate the dist release files from the existing binary and source files.
-fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
+pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
     let base = ["dists/", &sources.archive].concat();
-    let pool = ["pool/", &sources.archive, "/", &sources.default_branch].concat();
-
-    for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
-        let _ = fs::create_dir_all([&base, "/", &sources.default_branch, "/", arch].concat());
-    }
+    let pool = ["pool/", &sources.archive, "/"].concat();
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
     let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
-    let binary_suites = &binary_suites(&Path::new(&pool))
-        .map_err(|why| ReleaseError::Suites { why })?;
+    let mut source_threads = Vec::new();
+    let mut components = Vec::new();
 
-    let mut sources_result = Ok(());
-    let mut contents_result = Ok(());
-    let branch = &sources.default_branch;
+    for component in fs::read_dir(&pool).unwrap() {
+        if let Ok(component) = component {
+            if component.path().is_dir() {
+                let component = component.file_name();
+                let component = component.to_str().unwrap();
+                for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
+                    let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
+                }
 
-    rayon::scope(|s| {
-        // Generate Sources archives
-        s.spawn(|_| {
-            sources_result = generate::sources_index(branch, &base, &pool)
-                .map_err(|why| ReleaseError::Source { why });
-        });
+                let pool = [&pool, component].concat();
 
-        // Generate Contents & Packages archives
-        s.spawn(|_| {
-            contents_result = generate::contents(sources, &base, binary_suites)
-                .map_err(|why| ReleaseError::Contents { why });
-        });
-    });
+                let base = base.clone();
+                let component = component.to_owned();
+                components.push(component.clone());
 
-    sources_result.and(contents_result)?;
+                source_threads.push(thread::spawn(move || {
+                    generate::sources_index(&component, &base, &pool)
+                        .map_err(|why| ReleaseError::Source { why })
+                }));
+            }
+        }
+    }
 
-    generate::dists_release(sources, &base)
+    generate::contents(sources, &base, &Path::new(&pool), &components)
+        .map_err(|why| ReleaseError::Contents { why })?;
+
+    for handle in source_threads {
+        handle.join().unwrap()?;
+    }
+
+    generate::dists_release(sources, &base, &components)
         .map_err(|why| ReleaseError::Dists {
             archive: sources.archive.clone(),
             why,
@@ -153,25 +162,4 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     );
 
     inrelease.and(release)
-}
-
-fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
-    Ok(fs::read_dir(pool_base)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let arch = entry.file_name();
-            if &arch == "source" {
-                None
-            } else {
-                let path = pool_base.join(&arch);
-                let arch = match arch.to_str().unwrap() {
-                    "binary-amd64" => "amd64",
-                    "binary-i386" => "i386",
-                    "binary-all" => "all",
-                    arch => panic!("unsupported architecture: {}", arch),
-                };
-
-                Some((arch.to_owned(), path))
-            }
-        }).collect())
 }

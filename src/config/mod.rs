@@ -34,7 +34,7 @@ pub enum ConfigError {
 }
 
 /// An in-memory representation of the Debian repository's TOML spec
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Config {
     pub archive: String,
     pub version: String,
@@ -45,8 +45,8 @@ pub struct Config {
     pub direct: Option<Vec<Direct>>,
     /// Projects which can be built from source
     pub source: Option<Vec<Source>>,
-    #[serde(default = "default_branch")]
-    pub default_branch: String,
+    #[serde(default = "default_component")]
+    pub default_component: String,
 }
 
 impl Config {
@@ -81,7 +81,7 @@ impl Config {
     }
 }
 
-fn default_branch() -> String { "main".into() }
+fn default_component() -> String { "main".into() }
 
 /// Methods for fetching and updating values from the in-memory representation of the TOML spec.
 pub trait ConfigFetch {
@@ -181,7 +181,7 @@ impl ConfigFetch for Config {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Update {
     pub source:     String,
     pub url:        String,
@@ -191,7 +191,7 @@ pub struct Update {
     pub build_from: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct DirectPath {
     pub checksum: Option<String>,
     pub arch:     Option<String>,
@@ -200,7 +200,7 @@ pub struct DirectPath {
 }
 
 /// A Debian package which already exists and may be downloaded directly.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Direct {
     pub name:      String,
     pub version:   String,

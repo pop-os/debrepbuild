@@ -3,12 +3,12 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-type Branch = String;
+type component = String;
 type Commit = String;
 
-pub fn git(project: &Path) -> io::Result<(Branch, Commit)> {
-    let branch = misc::read_to_string(&project.join(".git/HEAD"))?;
-    let branch = branch
+pub fn git(project: &Path) -> io::Result<(component, Commit)> {
+    let component = misc::read_to_string(&project.join(".git/HEAD"))?;
+    let component = component
         .split_whitespace()
         .nth(1)
         .unwrap_or("")
@@ -16,9 +16,9 @@ pub fn git(project: &Path) -> io::Result<(Branch, Commit)> {
         .nth(2)
         .unwrap_or("");
 
-    let commit = misc::read_to_string(&project.join(&[".git/refs/heads/", &branch].concat()))?;
+    let commit = misc::read_to_string(&project.join(&[".git/refs/heads/", &component].concat()))?;
 
-    Ok((branch.to_owned(), commit))
+    Ok((component.to_owned(), commit))
 }
 
 pub fn changelog(path: &Path, retain: usize) -> io::Result<Vec<String>> {
