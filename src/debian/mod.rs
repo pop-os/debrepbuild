@@ -18,16 +18,10 @@ pub const DEB_DEBUG_EXTENSION: &str = ".ddeb";
 pub const DEB_EXTENSION: &str = ".deb";
 
 pub type Arch = String;
-pub type component = String;
+pub type Component = String;
 pub type Package = String;
 
 pub type Control = BTreeMap<String, String>;
-pub type Entries = HashMap<Arch, (HashMap<component, Vec<PackageEntry>>, Vec<ContentsEntry>)>;
+pub type Entries = HashMap<Arch, (HashMap<Component, Vec<PackageEntry>>, Vec<ContentsEntry>)>;
 
 pub type ContentList = Vec<(PathBuf, String)>;
-pub type PackageList = Vec<(component, Vec<ArchPackages>)>;
-
-pub struct ArchPackages {
-    arch: Arch,
-    packages: Vec<(Package, Vec<u8>)>
-}

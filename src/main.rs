@@ -160,7 +160,10 @@ fn main() {
                 },
                 Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
                 Action::Migrate(packages, from_component, to_component) => {
-                    repo::migrate(&sources, &packages, from_component, to_component);
+                    if let Err(why) = repo::migrate(&sources, &packages, from_component, to_component) {
+                        error!("migration failed: {}", why);
+                        exit(1);
+                    }
                 },
                 Action::Pool => {
                     Repo::prepare(sources, Packages::All).download();

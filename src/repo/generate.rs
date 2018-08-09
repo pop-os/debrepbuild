@@ -175,7 +175,7 @@ fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
         }).collect())
 }
 
-type ProcessedResults = Vec<io::Result<(PackageEntry, ContentsEntry, debian::Arch, debian::component)>>;
+type ProcessedResults = Vec<io::Result<(PackageEntry, ContentsEntry, debian::Arch, debian::Component)>>;
 
 pub(crate) fn dists(
     config: &Config,

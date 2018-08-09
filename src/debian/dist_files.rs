@@ -4,7 +4,7 @@ use itertools::Itertools;
 use rayon::prelude::*;
 use rayon::*;
 use std::fs::File;
-use std::io::{self, Error, ErrorKind, Write};
+use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use super::*;
@@ -15,18 +15,22 @@ pub struct DistFiles<'a> {
 }
 
 impl<'a> DistFiles<'a> {
-    pub fn new(path: &'a Path, entries: Entries) -> Self {
+    pub fn new(path: &'a Path, mut entries: Entries) -> Self {
+        // Sort each package list before proceeding.
+        entries.par_iter_mut().for_each(|(_, &mut (ref mut packages, _))| {
+            packages.par_iter_mut().for_each(|(_, ref mut packages)| {
+                packages.par_sort_unstable_by(|a, b| a.filename.cmp(&b.filename));
+            })
+        });
+
         DistFiles { path, entries }
     }
 
     // pub fn check_for_duplicates(&self) {
-    //     if let Err(why) = self.inner_check_for_duplicates() {
-    //         warn!("duplicate entry found in {}: {}", self.path.display(), why);
-    //     }
-    // }
-    //
-    // fn inner_check_for_duplicates(&self) -> io::Result<()> {
     //     let contents = &self.contents;
+    //     for (arch, (packages, contents)) in &self.entries {
+    //
+    //     }
     //     contents.windows(2)
     //         .position(|window| window[0] == window[1])
     //         .map_or(Ok(()), |pos| {
@@ -48,15 +52,14 @@ impl<'a> DistFiles<'a> {
             let (contents_res, packages_res) = rayon::join(
                 // Generate and compress the Contents archive for each architecture in parallel
                 || {
-                    // TODO: unnecessary heap allocation
                     let mut temp_contents = Vec::new();
-
                     for entry in contents {
                         for path in entry.files {
                             temp_contents.push((path, entry.package.clone()));
                         }
                     }
 
+                    temp_contents.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
                     let contents_reader = IteratorReader::new(
                         ContentsIterator {
                             contents: temp_contents.into_iter()

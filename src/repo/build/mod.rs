@@ -107,8 +107,6 @@ pub enum BuildError {
     NoChangelogVersion { package: String },
     #[fail(display = "failed to open file at {:?}: {}", file, why)]
     Open { file: PathBuf, why: io::Error },
-    #[fail(display = "failed to move {} to pool: {}", package, why)]
-    Pool { package: String, why: io::Error },
     #[fail(display = "failed to read file at {:?}: {}", file, why)]
     Read { file: PathBuf, why: io::Error },
     #[fail(display = "failed to update record for {}: {}", package, why)]
