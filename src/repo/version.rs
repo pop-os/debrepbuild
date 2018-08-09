@@ -3,10 +3,10 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-type component = String;
+type Branch = String;
 type Commit = String;
 
-pub fn git(project: &Path) -> io::Result<(component, Commit)> {
+pub fn git(project: &Path) -> io::Result<(Branch, Commit)> {
     let component = misc::read_to_string(&project.join(".git/HEAD"))?;
     let component = component
         .split_whitespace()

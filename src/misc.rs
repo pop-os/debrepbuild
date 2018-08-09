@@ -1,6 +1,6 @@
 use std::ffi::CString;
-use std::fs::File;
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Error, ErrorKind, Read, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use debian::DEB_SOURCE_EXTENSIONS;
@@ -10,6 +10,42 @@ use walkdir::{DirEntry, WalkDir};
 
 pub const INCLUDE_DDEB: u8 = 1;
 pub const INCLUDE_SRCS: u8 = 2;
+
+// Recursively removes directories from the given path, if the directories or their subdirectories
+// are empty.
+pub fn remove_empty_directories_from(directory: &Path) -> io::Result<bool> {
+    let mut empty = true;
+    let entries = directory.read_dir().map_err(|why| Error::new(
+        ErrorKind::Other,
+        format!("unable to read directory at {:?}: {}", directory, why)
+    ))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|why| Error::new(
+            ErrorKind::Other,
+            format!("bad entry in {:?}: {}", directory, why)
+        ))?;
+
+        let path = entry.path();
+        if path.is_dir() {
+            if !remove_empty_directories_from(&path)? {
+                empty = false;
+            }
+        } else {
+            return Ok(false);
+        }
+    }
+
+    if empty {
+        info!("removing {} because it is empty", directory.display());
+        fs::remove_dir(directory).map_err(|why| Error::new(
+            ErrorKind::Other,
+            format!("unable to remove entry at {:?}: {}", directory, why)
+        ))?;
+    }
+
+    Ok(empty)
+}
 
 pub fn is_deb(entry: &DirEntry, flags: u8) -> bool {
     entry.file_name().to_str().map_or(false, |e| {

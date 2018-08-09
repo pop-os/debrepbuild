@@ -9,8 +9,10 @@ mod version;
 pub use self::migrate::migrate;
 
 use config::Config;
+use misc::remove_empty_directories_from;
 use rayon;
-use std::{env, fs, io, thread};
+use rayon::prelude::*;
+use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -85,44 +87,22 @@ impl<'a> Repo<'a> {
 
 #[derive(Debug, Fail)]
 pub enum ReleaseError {
-    #[fail(display = "failed to generate release files for binaries: {}", why)]
-    Binary { why: io::Error },
-    #[fail(display = "failed to generate contents for binaries: {}", why)]
-    Contents { why: io::Error },
-    #[fail(display = "failed to generate source index: {}", why)]
-    Source { why: io::Error },
+    #[fail(display = "failed to collect component names from {:?}", pool)]
+    Components { pool: PathBuf, why: io::Error },
+    #[fail(display = "failed to generate distribution files for {}: {}", suite, why)]
+    DistGeneration { suite: String, why: io::Error },
     #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
-    Dists { archive: String, why: io::Error },
+    DistRelease { archive: String, why: io::Error },
+    #[fail(display = "failed to remove dists directory at {:?}: {}", path, why)]
+    DistRemoval { path: PathBuf, why: io::Error },
     #[fail(display = "failed to generate InRelease file: {}", why)]
     InRelease { why: io::Error },
+    #[fail(display = "pool cleanup failure at {:?}: {}", path, why)]
+    PoolCleanup { path: PathBuf, why: io::Error },
     #[fail(display = "failed to generate Release.gpg file: {}", why)]
     ReleaseGPG { why: io::Error },
-    #[fail(display = "unable to get list of suites from pool directory: {}", why)]
-    Suites { why: io::Error }
-}
-
-// Recursively removes directories from the given path, if the directories or their subdirectories
-// are empty.
-fn remove_empty_from(directory: &Path) -> io::Result<bool> {
-    let mut empty = true;
-    for entry in directory.read_dir()? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            if !remove_empty_from(&path)? {
-                empty = false;
-            }
-        } else {
-            return Ok(false);
-        }
-    }
-
-    if empty {
-        info!("removing {} because it is empty", directory.display());
-        fs::remove_dir(directory)?;
-    }
-
-    Ok(empty)
+    #[fail(display = "failed to generate source index: {}", why)]
+    Source { why: io::Error },
 }
 
 /// Generate the dist release files from the existing binary and source files.
@@ -131,52 +111,42 @@ pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
 
     let base = ["dists/", &sources.archive].concat();
     let pool = ["pool/", &sources.archive, "/"].concat();
+    let pool_path = &Path::new(&pool);
 
-    // Delete the dists directory in advance, since we will be regenerating everything.
-    let _ = fs::remove_dir_all(&base);
-    // Also delete any empty directories within the pool.
-    let _ = remove_empty_from(&Path::new(&pool));
+    {
+        let base = &base;
+        fs::remove_dir_all(&base)
+            .map_err(|why| ReleaseError::DistRemoval { path: PathBuf::from(base), why })?;
 
+        remove_empty_directories_from(pool_path)
+            .map_err(|why| ReleaseError::PoolCleanup { path: pool_path.to_path_buf(), why})?;
+    }
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
     let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
-    let mut source_threads = Vec::new();
-    let mut components = Vec::new();
+    let components = collect_components(pool_path, &base).map_err(|why| {
+        ReleaseError::Components { pool: pool_path.to_path_buf(), why }
+    })?;
 
-    for component in fs::read_dir(&pool).unwrap() {
-        if let Ok(component) = component {
-            if component.path().is_dir() {
-                let component = component.file_name();
-                let component = component.to_str().unwrap();
-                for arch in &["binary-amd64", "binary-i386", "binary-all", "source"] {
-                    let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
-                }
+    // Generates the dist directory's archives in parallel.
+    generate::dists(sources, &base, pool_path, &components)
+        .map_err(|why| ReleaseError::DistGeneration {
+            suite: sources.archive.clone(),
+            why
+        })?;
 
-                let pool = [&pool, component].concat();
-
-                let base = base.clone();
-                let component = component.to_owned();
-                components.push(component.clone());
-
-                source_threads.push(thread::spawn(move || {
-                    generate::sources_index(&component, &base, &pool)
-                        .map_err(|why| ReleaseError::Source { why })
-                }));
-            }
-        }
-    }
-
-    generate::contents(sources, &base, &Path::new(&pool), &components)
-        .map_err(|why| ReleaseError::Contents { why })?;
-
-    for handle in source_threads {
-        handle.join().unwrap()?;
-    }
+    // TODO: Merge this functionality with generate::dists
+    // Then write the source archives in the dist directory
+    components.par_iter().map(|component| {
+        let pool = [&pool, component.as_str()].concat();
+        generate::sources_index(&component, &base, &pool)
+            .map_err(|why| ReleaseError::Source { why })
+    }).collect::<Result<(), ReleaseError>>()?;
 
     generate::dists_release(sources, &base, &components)
-        .map_err(|why| ReleaseError::Dists {
+        .map_err(|why| ReleaseError::DistRelease {
             archive: sources.archive.clone(),
             why,
         })?;
@@ -193,4 +163,24 @@ pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     );
 
     inrelease.and(release)
+}
+
+fn collect_components(pool: &Path, base: &str) -> io::Result<Vec<String>> {
+    let mut components = Vec::new();
+
+    for component in pool.read_dir()? {
+        if let Ok(component) = component {
+            if component.path().is_dir() {
+                let component = component.file_name();
+                let component = component.to_str().unwrap();
+                for arch in &["binary-amd64", "binary-i386", "binary-all", "source"] {
+                    let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
+                }
+
+                components.push(component.to_owned());
+            }
+        }
+    }
+
+    Ok(components)
 }

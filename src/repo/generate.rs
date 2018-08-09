@@ -177,13 +177,13 @@ fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
 
 type ProcessedResults = Vec<io::Result<(PackageEntry, ContentsEntry, debian::Arch, debian::component)>>;
 
-pub(crate) fn contents(
+pub(crate) fn dists(
     config: &Config,
     dist_base: &str,
     pool_base: &Path,
     components: &[String],
 ) -> io::Result<()> {
-    info!("generating content archives");
+    info!("generating dist archives");
 
     let origin = &config.origin;
 
