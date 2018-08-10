@@ -1,26 +1,73 @@
 use std::ffi::CString;
-use std::fs::File;
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Error, ErrorKind, Read, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
+use debian::DEB_SOURCE_EXTENSIONS;
 
 use libc;
 use walkdir::{DirEntry, WalkDir};
 
-pub fn walk_debs(path: &Path, include_ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
-    fn is_deb(entry: &DirEntry, include_ddeb: bool) -> bool {
-        if entry.path().is_dir() {
-            true
+pub const INCLUDE_DDEB: u8 = 1;
+pub const INCLUDE_SRCS: u8 = 2;
+
+// Recursively removes directories from the given path, if the directories or their subdirectories
+// are empty.
+pub fn remove_empty_directories_from(directory: &Path) -> io::Result<bool> {
+    let mut empty = true;
+    let entries = directory.read_dir().map_err(|why| Error::new(
+        ErrorKind::Other,
+        format!("unable to read directory at {:?}: {}", directory, why)
+    ))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|why| Error::new(
+            ErrorKind::Other,
+            format!("bad entry in {:?}: {}", directory, why)
+        ))?;
+
+        let path = entry.path();
+        if path.is_dir() {
+            if !remove_empty_directories_from(&path)? {
+                empty = false;
+            }
         } else {
-            entry.file_name().to_str().map_or(false, |e| {
-                e.ends_with(".deb") || {
-                    if include_ddeb { e.ends_with(".ddeb") } else { false }
-                }
-            })
+            return Ok(false);
         }
     }
 
-    Box::new(WalkDir::new(path).into_iter().filter_entry(move |e| is_deb(e, include_ddeb)).flat_map(|e| e.ok()))
+    if empty {
+        info!("removing {} because it is empty", directory.display());
+        fs::remove_dir(directory).map_err(|why| Error::new(
+            ErrorKind::Other,
+            format!("unable to remove entry at {:?}: {}", directory, why)
+        ))?;
+    }
+
+    Ok(empty)
+}
+
+pub fn is_deb(entry: &DirEntry, flags: u8) -> bool {
+    entry.file_name().to_str().map_or(false, |e| {
+        e.ends_with(".deb") || {
+            if flags & INCLUDE_DDEB != 0 { e.ends_with(".ddeb") } else { false }
+        } || {
+            if flags & INCLUDE_SRCS != 0 {
+                DEB_SOURCE_EXTENSIONS.into_iter().any(|ext| e.ends_with(ext))
+            } else {
+                false
+            }
+        }
+    })
+}
+
+pub fn walk_debs(path: &Path, ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
+    Box::new(
+        WalkDir::new(path)
+            .into_iter()
+            .filter_entry(move |e| if e.path().is_dir() { true } else { is_deb(e, ddeb as u8) })
+            .flat_map(|e| e.ok())
+    )
 }
 
 pub fn match_deb(entry: &DirEntry, packages: &[String]) -> Option<(String, usize)> {

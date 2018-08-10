@@ -23,7 +23,7 @@ pub enum SourceLocation {
     Git { git: String, branch: Option<String> },
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Source {
     pub name:           String,
     pub location:       Option<SourceLocation>,

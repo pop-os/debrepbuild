@@ -24,7 +24,7 @@ pub fn all(config: &Config) {
     let pwd = env::current_dir().unwrap();
     if let Some(ref sources) = config.source {
         for source in sources {
-            if let Err(why) = build(source, &pwd, &config.archive, &config.default_branch, false) {
+            if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
@@ -33,7 +33,7 @@ pub fn all(config: &Config) {
         migrate_to_pool(config, sources.iter());
     }
 
-    if let Err(why) = metapackages::generate(&config.archive, &config.default_branch) {
+    if let Err(why) = metapackages::generate(&config.archive, &config.default_component) {
         error!("metapackage generation failed: {}", why);
         exit(1);
     }
@@ -49,7 +49,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                 .collect::<Vec<&Source>>();
 
             for item in &sources {
-                if let Err(why) = build(item, &pwd, &config.archive, &config.default_branch, force) {
+                if let Err(why) = build(item, &pwd, &config.archive, &config.default_component, force) {
                     error!("package '{}' failed to build: {}", item.name, why);
                     exit(1);
                 }
@@ -71,7 +71,7 @@ fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources
         if let Err(why) = mv_to_pool(
             "build",
             &config.archive,
-            &config.default_branch,
+            &config.default_component,
             if source.keep_source { KEEP_SOURCE } else { 0 },
             Some(&source.name)
         ) {
@@ -107,8 +107,6 @@ pub enum BuildError {
     NoChangelogVersion { package: String },
     #[fail(display = "failed to open file at {:?}: {}", file, why)]
     Open { file: PathBuf, why: io::Error },
-    #[fail(display = "failed to move {} to pool: {}", package, why)]
-    Pool { package: String, why: io::Error },
     #[fail(display = "failed to read file at {:?}: {}", file, why)]
     Read { file: PathBuf, why: io::Error },
     #[fail(display = "failed to update record for {}: {}", package, why)]
@@ -149,7 +147,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) -> Result<(), BuildError> {
+pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", &item.name].concat());
 
@@ -223,7 +221,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, branch: &str, force: bool) 
         item,
         &pwd,
         suite,
-        branch,
+        component,
         &project_directory,
         force,
     )?;
@@ -250,7 +248,7 @@ fn pre_flight(
     item: &Source,
     pwd: &Path,
     suite: &str,
-    branch: &str,
+    component: &str,
     dir: &Path,
     force: bool
 ) -> Result<(), BuildError> {
@@ -339,7 +337,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(item, &pwd, suite, branch, dir)?;
+    sbuild(item, &pwd, suite, component, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -364,7 +362,7 @@ fn sbuild<P: AsRef<Path>>(
     item: &Source,
     pwd: &Path,
     suite: &str,
-    branch: &str,
+    component: &str,
     path: P,
 ) -> Result<(), BuildError> {
     let log_path = pwd.join(["logs/", &item.name].concat());
@@ -381,7 +379,7 @@ fn sbuild<P: AsRef<Path>>(
         ));
 
     if let Some(ref depends) = item.depends {
-        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", branch].concat()), false)
+        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", component].concat()), false)
             .flat_map(|deb| misc::match_deb(&deb, depends))
             .collect::<Vec<(String, usize)>>();
 

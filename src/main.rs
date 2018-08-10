@@ -118,18 +118,18 @@ fn main() {
             .about("Updates direct download-based packages in the configuration")
             .alias("u")
         ).subcommand(SubCommand::with_name("migrate")
-            .about("Moves a package from one branch to another, updating both branches in the process")
+            .about("Moves a package from one component to another, updating both components in the process")
             .alias("m")
             .arg(Arg::with_name("packages")
                 .multiple(true)
                 .required(true))
             .arg(Arg::with_name("from")
-                .help("specifies the branch which packages are being moved from")
+                .help("specifies the component which packages are being moved from")
                 .long("from")
                 .takes_value(true)
                 .required(true))
             .arg(Arg::with_name("to")
-                .help("specifies the branch which packages are being moved to")
+                .help("specifies the component which packages are being moved to")
                 .long("to")
                 .takes_value(true)
                 .required(true))
@@ -159,9 +159,11 @@ fn main() {
                     }
                 },
                 Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
-                Action::Migrate(packages, from_branch, to_branch) => {
-                    info!("migrating {:?} from {} to {}", packages, from_branch, to_branch);
-                    unimplemented!();
+                Action::Migrate(packages, from_component, to_component) => {
+                    if let Err(why) = repo::migrate(&sources, &packages, from_component, to_component) {
+                        error!("migration failed: {}", why);
+                        exit(1);
+                    }
                 },
                 Action::Pool => {
                     Repo::prepare(sources, Packages::All).download();

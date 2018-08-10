@@ -1,6 +1,7 @@
 use std::{fs, io};
 use std::path::{Path, PathBuf};
 use config::Config;
+use debian::DEB_SOURCE_EXTENSIONS;
 use super::version::changelog;
 use walkdir::{DirEntry, WalkDir};
 
@@ -15,7 +16,7 @@ pub fn create_missing_directories() -> io::Result<()> {
 }
 
 pub fn package_cleanup(config: &Config) -> io::Result<()> {
-    let path = PathBuf::from(["repo/pool/", &config.archive, "/", &config.default_branch].concat());
+    let path = PathBuf::from(["repo/pool/", &config.archive, "/", &config.default_component].concat());
     for entry in WalkDir::new(path).min_depth(3).max_depth(3).into_iter().filter_map(|x| x.ok()) {
         let path = entry.path();
         if let Some(filename) = path.file_name().and_then(|x| x.to_str()) {
@@ -49,8 +50,8 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
     Ok(())
 }
 
-pub fn remove(packages: &[&str], suite: &str, branch: &str) -> io::Result<()> {
-    let path = PathBuf::from(["repo/pool/", suite, "/", branch].concat());
+pub fn remove(packages: &[&str], suite: &str, component: &str) -> io::Result<()> {
+    let path = PathBuf::from(["repo/pool/", suite, "/", component].concat());
     for entry in WalkDir::new(path).min_depth(3).max_depth(3).into_iter().filter_map(|x| x.ok()) {
         let path = entry.path();
         if let Some(filename) = path.file_name().and_then(|x| x.to_str()) {
@@ -91,7 +92,7 @@ fn locate_files(name: &str, archive: &str) -> Vec<(DirEntry, String)> {
 }
 
 fn get_version(e: &str) -> &str {
-    for ext in &[".tar.gz", ".tar.xz", ".dsc"] {
+    for ext in DEB_SOURCE_EXTENSIONS {
         if e.ends_with(ext) {
             return &e[..e.len() - ext.len()];
         }

@@ -1,16 +1,17 @@
 use std::{io, fs};
 use std::path::{Path, PathBuf};
+use debian::DEB_SOURCE_EXTENSIONS;
 use misc;
 
 pub const KEEP_SOURCE: u8 = 1;
 pub const ARCHIVES_ONLY: u8 = 2;
 
-pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, branch: &str, flags: u8, filter: Option<&str>) -> io::Result<()> {
-    info!("moving items in {} to pool at {}/{}", path.as_ref().display(), suite, branch);
+pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, component: &str, flags: u8, filter: Option<&str>) -> io::Result<()> {
+    info!("moving items in {} to pool at {}/{}", path.as_ref().display(), suite, component);
     pool(
         path.as_ref(),
         suite,
-        branch,
+        component,
         flags,
         |src, dst| if flags & KEEP_SOURCE != 0 || !is_source(src) {
             fs::rename(src, dst)
@@ -34,7 +35,7 @@ fn is_archive(src: &Path) -> bool {
 fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
     path: &Path,
     suite: &str,
-    branch: &str,
+    component: &str,
     flags: u8,
     action: F,
     filter: Option<&str>,
@@ -61,10 +62,10 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
             info!("migrating {} to pool", path.display());
             let mut package = &filename[..filename.find('_').unwrap_or(0)];
 
-            let is_source = ["dsc", "tar.xz", "tar.gz"].into_iter().any(|ext| filename.ends_with(ext));
+            let is_source = DEB_SOURCE_EXTENSIONS.into_iter().any(|ext| filename.ends_with(&ext[1..]));
             let destination = if is_source {
                 PathBuf::from(
-                    ["repo/pool/", suite, "/", branch, "/source/", &package[0..1], "/", package].concat()
+                    ["repo/pool/", suite, "/", component, "/source/", &package[0..1], "/", package].concat()
                 )
             } else {
                 if package.ends_with("-dbgsym") {
@@ -74,7 +75,7 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
                 let arch = misc::get_arch_from_stem(filestem);
 
                 PathBuf::from(
-                    ["repo/pool/", suite, "/", branch, "/binary-", arch, "/", &package[0..1], "/", package].concat(),
+                    ["repo/pool/", suite, "/", component, "/binary-", arch, "/", &package[0..1], "/", package].concat(),
                 )
             };
 

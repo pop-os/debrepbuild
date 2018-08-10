@@ -14,6 +14,8 @@ pub struct DebianArchive<'a> {
 }
 
 impl<'a> DebianArchive<'a> {
+    /// The path given must be a valid Debian ar archive. It will be scanned to verify that the
+    /// inner data.tar and control.tar entries are reachable, and records their position.
     pub fn new(path: &'a Path) -> io::Result<Self> {
         let mut archive = ar::Archive::new(File::open(path)?);
 
@@ -53,6 +55,7 @@ impl<'a> DebianArchive<'a> {
         Ok(DebianArchive { path, control, data })
     }
 
+    /// Enables the caller to process entries from the inner data archive.
     pub fn data<F: FnMut(&Path)>(&self, action: F) -> io::Result<()> {
         self.inner_data(action).map_err(|why| io::Error::new(
             io::ErrorKind::Other,
@@ -81,6 +84,7 @@ impl<'a> DebianArchive<'a> {
         Ok(())
     }
 
+    /// Enables the caller to get the contents of the control file in the control archive as a map
     pub fn control(&self) -> io::Result<BTreeMap<String, String>> {
         self.inner_control().map_err(|why| io::Error::new(
             io::ErrorKind::Other,

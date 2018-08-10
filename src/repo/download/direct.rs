@@ -4,6 +4,7 @@ use std::io;
 use std::path::PathBuf;
 
 use config::Direct;
+use debian::DEB_SOURCE_EXTENSIONS;
 use misc;
 use super::request;
 use super::url::UrlTokenizer;
@@ -14,11 +15,11 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: &Client, item: &Direct, suite: &str, branch: &str) -> io::Result<DownloadResult> {
+pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) -> io::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
     fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
-        if ext == "tar.gz" || ext == "tar.xz" || ext == "dsc" {
+        if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
             [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
         } else {
             [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
@@ -59,8 +60,8 @@ pub fn download(client: &Client, item: &Direct, suite: &str, branch: &str) -> io
             let filename = &gen_filename(name, &item.version, arch, extension);
 
             let dst = match extension {
-                "tar.gz" | "tar.xz" | "dsc" => ["/", branch, "/source/"].concat(),
-                _ => ["/", branch, "/binary-", arch, "/"].concat()
+                "tar.gz" | "tar.xz" | "dsc" => ["/", component, "/source/"].concat(),
+                _ => ["/", component, "/binary-", arch, "/"].concat()
             };
 
             PathBuf::from(
@@ -77,10 +78,10 @@ pub fn download(client: &Client, item: &Direct, suite: &str, branch: &str) -> io
 }
 
 /// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct], suite: &str, branch: &str) -> Vec<io::Result<DownloadResult>> {
+pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<io::Result<DownloadResult>> {
     let client = Client::new();
     items
         .par_iter()
-        .map(|item| download(&client, item, suite, branch))
+        .map(|item| download(&client, item, suite, component))
         .collect()
 }

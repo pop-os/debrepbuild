@@ -1,12 +1,17 @@
 mod build;
 mod download;
 mod generate;
+mod migrate;
 mod pool;
 mod prepare;
 mod version;
 
+pub use self::migrate::migrate;
+
 use config::Config;
+use misc::remove_empty_directories_from;
 use rayon;
+use rayon::prelude::*;
 use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -70,7 +75,7 @@ impl<'a> Repo<'a> {
 
     pub fn remove(self) -> Self {
         if let Packages::Select(ref packages, _) = self.packages {
-            if let Err(why) = prepare::remove(packages, &self.config.archive, &self.config.default_branch) {
+            if let Err(why) = prepare::remove(packages, &self.config.archive, &self.config.default_component) {
                 error!("failed to remove file: {}", why);
                 exit(1);
             }
@@ -82,61 +87,66 @@ impl<'a> Repo<'a> {
 
 #[derive(Debug, Fail)]
 pub enum ReleaseError {
-    #[fail(display = "failed to generate release files for binaries: {}", why)]
-    Binary { why: io::Error },
-    #[fail(display = "failed to generate contents for binaries: {}", why)]
-    Contents { why: io::Error },
-    #[fail(display = "failed to generate source index: {}", why)]
-    Source { why: io::Error },
+    #[fail(display = "failed to collect component names from {:?}", pool)]
+    Components { pool: PathBuf, why: io::Error },
+    #[fail(display = "failed to generate distribution files for {}: {}", suite, why)]
+    DistGeneration { suite: String, why: io::Error },
     #[fail(display = "failed to generate dist release files for {}: {}", archive, why)]
-    Dists { archive: String, why: io::Error },
+    DistRelease { archive: String, why: io::Error },
+    #[fail(display = "failed to remove dists directory at {:?}: {}", path, why)]
+    DistRemoval { path: PathBuf, why: io::Error },
     #[fail(display = "failed to generate InRelease file: {}", why)]
     InRelease { why: io::Error },
+    #[fail(display = "pool cleanup failure at {:?}: {}", path, why)]
+    PoolCleanup { path: PathBuf, why: io::Error },
     #[fail(display = "failed to generate Release.gpg file: {}", why)]
     ReleaseGPG { why: io::Error },
-    #[fail(display = "unable to get list of suites from pool directory: {}", why)]
-    Suites { why: io::Error }
+    #[fail(display = "failed to generate source index: {}", why)]
+    Source { why: io::Error },
 }
 
 /// Generate the dist release files from the existing binary and source files.
-fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
+pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     env::set_current_dir("repo").expect("unable to switch dir to repo");
-    let base = ["dists/", &sources.archive].concat();
-    let pool = ["pool/", &sources.archive, "/", &sources.default_branch].concat();
 
-    for arch in &["binary-amd64", "binary-i386", "binary-all", "sources"] {
-        let _ = fs::create_dir_all([&base, "/", &sources.default_branch, "/", arch].concat());
+    let base = ["dists/", &sources.archive].concat();
+    let pool = ["pool/", &sources.archive, "/"].concat();
+    let pool_path = &Path::new(&pool);
+
+    {
+        let base = &base;
+        fs::remove_dir_all(&base)
+            .map_err(|why| ReleaseError::DistRemoval { path: PathBuf::from(base), why })?;
+
+        remove_empty_directories_from(pool_path)
+            .map_err(|why| ReleaseError::PoolCleanup { path: pool_path.to_path_buf(), why})?;
     }
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
     let release_gpg = PathBuf::from([&base, "/Release.gpg"].concat());
 
-    let binary_suites = &binary_suites(&Path::new(&pool))
-        .map_err(|why| ReleaseError::Suites { why })?;
+    let components = collect_components(pool_path, &base).map_err(|why| {
+        ReleaseError::Components { pool: pool_path.to_path_buf(), why }
+    })?;
 
-    let mut sources_result = Ok(());
-    let mut contents_result = Ok(());
-    let branch = &sources.default_branch;
+    // Generates the dist directory's archives in parallel.
+    generate::dists(sources, &base, pool_path, &components)
+        .map_err(|why| ReleaseError::DistGeneration {
+            suite: sources.archive.clone(),
+            why
+        })?;
 
-    rayon::scope(|s| {
-        // Generate Sources archives
-        s.spawn(|_| {
-            sources_result = generate::sources_index(branch, &base, &pool)
-                .map_err(|why| ReleaseError::Source { why });
-        });
+    // TODO: Merge this functionality with generate::dists
+    // Then write the source archives in the dist directory
+    components.par_iter().map(|component| {
+        let pool = [&pool, component.as_str()].concat();
+        generate::sources_index(&component, &base, &pool)
+            .map_err(|why| ReleaseError::Source { why })
+    }).collect::<Result<(), ReleaseError>>()?;
 
-        // Generate Contents & Packages archives
-        s.spawn(|_| {
-            contents_result = generate::contents(sources, &base, binary_suites)
-                .map_err(|why| ReleaseError::Contents { why });
-        });
-    });
-
-    sources_result.and(contents_result)?;
-
-    generate::dists_release(sources, &base)
-        .map_err(|why| ReleaseError::Dists {
+    generate::dists_release(sources, &base, &components)
+        .map_err(|why| ReleaseError::DistRelease {
             archive: sources.archive.clone(),
             why,
         })?;
@@ -155,23 +165,22 @@ fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     inrelease.and(release)
 }
 
-fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
-    Ok(fs::read_dir(pool_base)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let arch = entry.file_name();
-            if &arch == "source" {
-                None
-            } else {
-                let path = pool_base.join(&arch);
-                let arch = match arch.to_str().unwrap() {
-                    "binary-amd64" => "amd64",
-                    "binary-i386" => "i386",
-                    "binary-all" => "all",
-                    arch => panic!("unsupported architecture: {}", arch),
-                };
+fn collect_components(pool: &Path, base: &str) -> io::Result<Vec<String>> {
+    let mut components = Vec::new();
 
-                Some((arch.to_owned(), path))
+    for component in pool.read_dir()? {
+        if let Ok(component) = component {
+            if component.path().is_dir() {
+                let component = component.file_name();
+                let component = component.to_str().unwrap();
+                for arch in &["binary-amd64", "binary-i386", "binary-all", "source"] {
+                    let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
+                }
+
+                components.push(component.to_owned());
             }
-        }).collect())
+        }
+    }
+
+    Ok(components)
 }
