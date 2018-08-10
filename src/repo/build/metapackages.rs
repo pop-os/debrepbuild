@@ -16,7 +16,7 @@ pub fn generate(suite: &str, component: &str) -> io::Result<()> {
             e.map_err(|why| Error::new(
                 ErrorKind::Other,
                 format!("entry in directory walk had an error: {}", why)
-            )).and_then(inner_generate)
+            )).and_then(|ref x| inner_generate(x))
         })
         .collect::<io::Result<()>>()?;
 
@@ -27,7 +27,7 @@ fn is_cfg(entry: &DirEntry) -> bool {
     !entry.path().is_dir() && entry.file_name().to_str().map_or(false, |e| e.ends_with(".cfg"))
 }
 
-fn inner_generate(entry: DirEntry) -> io::Result<()> {
+fn inner_generate(entry: &DirEntry) -> io::Result<()> {
     let filename = entry.file_name();
     let path = entry.path();
 

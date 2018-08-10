@@ -1,8 +1,8 @@
 use config::Config;
 use iter_reader::IteratorReader;
 use itertools::Itertools;
+use rayon;
 use rayon::prelude::*;
-use rayon::*;
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -15,14 +15,7 @@ pub struct DistFiles<'a> {
 }
 
 impl<'a> DistFiles<'a> {
-    pub fn new(path: &'a Path, mut entries: Entries) -> Self {
-        // Sort each package list before proceeding.
-        entries.par_iter_mut().for_each(|(_, &mut (ref mut packages, _))| {
-            packages.par_iter_mut().for_each(|(_, ref mut packages)| {
-                packages.par_sort_unstable_by(|a, b| a.filename.cmp(&b.filename));
-            })
-        });
-
+    pub fn new(path: &'a Path, entries: Entries) -> Self {
         DistFiles { path, entries }
     }
 
@@ -47,29 +40,29 @@ impl<'a> DistFiles<'a> {
         let entries = self.entries;
         let path = self.path;
 
+        // Processes each architecture in parallel, including the contents archives for each arch.
         entries.into_par_iter().map(|(arch, (packages, contents))| {
             let arch: &str = &arch;
             let (contents_res, packages_res) = rayon::join(
-                // Generate and compress the Contents archive for each architecture in parallel
+                // Generate and compress the Contents archive for each architecture in parallel.
+                // Contents are processed in a per-architecture manner, rather than per-component.
                 || {
-                    let mut temp_contents = Vec::new();
-                    for entry in contents {
-                        for path in entry.files {
-                            temp_contents.push((path, entry.package.clone()));
-                        }
-                    }
+                    // Sort the files beforehand, so files are easy to track down.
+                    // This will require that we generate the contents archive in advance, sadly.
+                    let mut contents = ContentsIterator::new(contents).collect::<Vec<Vec<u8>>>();
+                    contents.par_sort_unstable_by(|a, b| a.cmp(&b));
 
-                    temp_contents.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
                     let contents_reader = IteratorReader::new(
-                        ContentsIterator {
-                            contents: temp_contents.into_iter()
-                        },
+                        contents.into_iter(),
                         Vec::with_capacity(64 * 1024)
                     );
 
+                    // Similar to the Packages archives, we also need an uncompressed variant of
+                    // the compressed archives to satisfy APT's detection capabilities.
                     compress(&["Contents-", &arch].concat(), path, contents_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
                 },
                 // Generate & compress each Packages archive for each architecture & component in parallel.
+                // Packages archives are processed in a per-architecture, per-component manner.
                 || {
                     let arch_dir = match arch {
                         "amd64" => "binary-amd64",
@@ -78,31 +71,37 @@ impl<'a> DistFiles<'a> {
                         arch => panic!("unsupported architecture: {}", arch),
                     };
 
-                    packages.into_par_iter().map(|(component, packages)| {
+                    // Processes the packages of each component in parallel, for this architecture.
+                    packages.into_par_iter().map(|(component, mut packages)| {
+                        // Construct the path where the Packages archives will be written.
                         let binary_path = &path.join(&component).join(arch_dir);
 
+                        // Sort the packages that were collected before we generate them for writing.
+                        packages.par_sort_unstable_by(|a, b| a.filename.cmp(&b.filename));
+
+                        // Generate the packages content in advance so that we can handle the errors.
                         let mut generated_packages = Vec::new();
                         for package in packages {
-                            generated_packages.push((
-                                package.control.get("Package").ok_or_else(|| io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    format!("{} does not have Package key in control file", path.display())
-                                ))?.clone(),
-                                package.generate_entry(origin, bugs)?
-                            ))
+                            generated_packages.push(package.generate_entry(origin, bugs)?)
                         }
 
+                        // This iterator will be supplied to our compressor, writing the final
+                        // output with an empty newline between each entry.
                         let packages_reader = IteratorReader::new(
-                            generated_packages.into_iter().map(|(_, p)| p).intersperse(vec![b'\n']),
+                            generated_packages.into_iter().map(|p| p).intersperse(vec![b'\n']),
                             Vec::with_capacity(64 * 1024)
                         );
 
-                        compress("Packages", binary_path, packages_reader, UNCOMPRESSED| GZ_COMPRESS | XZ_COMPRESS)
+                        // Although we will generate a compressed GZ and XZ archive for our
+                        // repository, APT still requires that we also write an uncompressed variant.
+                        compress("Packages", binary_path, packages_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
                             .map_err(|why| io::Error::new(
                                 io::ErrorKind::Other,
                                 format!("failed to generate content archive at {}: {}", path.display(), why)
                             ))?;
 
+                        // A release file also needs to be stored in the same location, after the
+                        // archives have been written. This contains the checksums for each file.
                         inner_write_release_file(config, binary_path, arch_dir, &component).map_err(|why| io::Error::new(
                             io::ErrorKind::Other,
                             format!("failed to create release file for {}: {}", binary_path.display(), why)
@@ -111,6 +110,7 @@ impl<'a> DistFiles<'a> {
                 }
             );
 
+            // Check the results to see if we passed.
             contents_res.map_err(|why| io::Error::new(
                 io::ErrorKind::Other,
                 format!("failed to generate content archive at {}: {}", path.display(), why)
@@ -121,26 +121,45 @@ impl<'a> DistFiles<'a> {
     }
 }
 
-pub struct ContentsIterator<T> {
-    pub contents: T,
+/// Efficiently generate each line of the Contents file, in style.
+pub struct ContentsIterator {
+    contents: Vec<ContentsEntry>,
+    buffer: Vec<u8>,
+    package: usize,
+    file: usize
 }
 
-impl<T: Iterator<Item = (PathBuf, String)>> Iterator for ContentsIterator<T> {
+impl ContentsIterator {
+    pub fn new(contents: Vec<ContentsEntry>) -> Self {
+        ContentsIterator { contents, buffer: Vec::with_capacity(512), package: 0, file: 0 }
+    }
+}
+
+impl Iterator for ContentsIterator {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (path, package) = self.contents.next()?;
-        let path = path.as_os_str().as_bytes();
-        let mut serialized = Vec::new();
-        serialized.extend_from_slice(if &path[..2] == b"./" {
-            &path[2..]
-        } else {
-            path
-        });
-        serialized.extend_from_slice(b"  ");
-        serialized.extend_from_slice(package.as_bytes());
-        serialized.push(b'\n');
-        Some(serialized)
+        loop {
+            let contents_entry = self.contents.get(self.package)?;
+            match contents_entry.files.get(self.file) {
+                Some(path) => {
+                    self.file += 1;
+                    let path = path.as_os_str().as_bytes();
+                    self.buffer.extend_from_slice(if &path[..2] == b"./" { &path[2..] } else { path });
+                    self.buffer.extend_from_slice(b"  ");
+                    self.buffer.extend_from_slice(contents_entry.package.as_bytes());
+                    self.buffer.push(b'\n');
+                    let mut serialized = self.buffer.clone();
+                    serialized.shrink_to_fit();
+                    self.buffer.clear();
+                    return Some(serialized);
+                }
+                None => {
+                    self.file = 0;
+                    self.package += 1;
+                }
+            }
+        }
     }
 }
 

@@ -10,7 +10,6 @@ pub use self::package::*;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use rayon;
 use compress::*;
 
 pub const DEB_SOURCE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.xz", ".dsc"];
