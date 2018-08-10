@@ -45,6 +45,7 @@ pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -
         })
 }
 
+// TODO: this can easily be replaced with Rust.
 /// Generates the dists release file via `apt-ftparchive`.
 pub(crate) fn dists_release(config: &Config, base: &str, components: &[String]) -> io::Result<()> {
     info!("generating dists release files");
@@ -225,6 +226,7 @@ pub(crate) fn dists(
                         // Now get a listing of all the files for the Contents archive.
                         let mut files = Vec::new();
 
+                        // Runs each scope in parallel to generate the contents and checksums.
                         let (content_res, ((sha1_res, sha256_res), (sha512_res, md5_res))) = {
                             let path = &debian_entry;
                             // TODO: use bus_writer instead of reading the same file in each thread.
@@ -268,11 +270,13 @@ pub(crate) fn dists(
         }).collect::<Vec<ProcessedResults>>()
     }).collect::<Vec<Vec<ProcessedResults>>>();
 
+    // Flatten the results for each architecture of each component into a single iterator.
     let entries = entries.into_iter()
         .flat_map(|entries| entries.into_iter().flat_map(|x| x.into_iter()));
 
+    // Validate the results of each parallel process, and collect them in a manner so that they
+    // may be used for further parallel processing and compression.
     let mut entries_map: debian::Entries = HashMap::new();
-
     for result in entries {
         let (package, contents, arch, component) = result?;
 
