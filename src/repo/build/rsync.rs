@@ -6,7 +6,10 @@ pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
     info!("rsyncing {} to {}", src.display(), dst.display());
 
     if src.is_dir() {
-        fs::create_dir_all(src)?;
+        fs::create_dir_all(dst).map_err(|why| io::Error::new(
+            io::ErrorKind::Other,
+            format!("failed to create destination directory at {:?} for rsync: {}", dst, why)
+        ))?;
     }
 
     Command::new("rsync")
