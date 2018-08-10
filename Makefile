@@ -7,7 +7,7 @@ all: $(BINARY)
 clean:
 	cargo clean
 
-distclean clean:
+distclean: clean
 	rm -rf .cargo vendor
 
 install:
@@ -22,8 +22,4 @@ vendor: .cargo/config
 	touch vendor
 
 $(BINARY):
-	if [ -d vendor ]; then \
-		cargo build --frozen --release; \
-	else \
-		cargo build --release; \
-	fi
+	cargo build --release
