@@ -114,13 +114,15 @@ pub fn generate_release_files(sources: &Config) -> Result<(), ReleaseError> {
     let pool_path = &Path::new(&pool);
 
     {
-        let base = &base;
-        fs::remove_dir_all(&base)
-            .map_err(|why| ReleaseError::DistRemoval { path: PathBuf::from(base), why })?;
-
-        remove_empty_directories_from(pool_path)
-            .map_err(|why| ReleaseError::PoolCleanup { path: pool_path.to_path_buf(), why})?;
+        let base = &Path::new(&base);
+        if base.exists() {
+            fs::remove_dir_all(&base)
+                .map_err(|why| ReleaseError::DistRemoval { path: base.to_path_buf(), why })?;
+        }
     }
+
+    remove_empty_directories_from(pool_path)
+        .map_err(|why| ReleaseError::PoolCleanup { path: pool_path.to_path_buf(), why})?;
 
     let release = PathBuf::from([&base, "/Release"].concat());
     let in_release = PathBuf::from([&base, "/InRelease"].concat());
