@@ -23,14 +23,24 @@ use walkdir::WalkDir;
 pub fn all(config: &Config) {
     let pwd = env::current_dir().unwrap();
     if let Some(ref sources) = config.source {
+        migrate_to_pool(config, sources.iter());
         for source in sources {
             if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
-        }
 
-        migrate_to_pool(config, sources.iter());
+            if let Err(why) = mv_to_pool(
+                "build",
+                &config.archive,
+                &config.default_component,
+                if source.keep_source { KEEP_SOURCE } else { 0 },
+                Some(&source.name)
+            ) {
+                error!("package '{}' failed to migrate to pool: {}", source.name, why);
+                exit(1);
+            }
+        }
     }
 
     if let Err(why) = metapackages::generate(&config.archive, &config.default_component) {
@@ -48,9 +58,21 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                 .filter(|item| packages.contains(&item.name.as_str()))
                 .collect::<Vec<&Source>>();
 
-            for item in &sources {
-                if let Err(why) = build(item, &pwd, &config.archive, &config.default_component, force) {
-                    error!("package '{}' failed to build: {}", item.name, why);
+            migrate_to_pool(config, sources.iter().cloned());
+            for source in &sources {
+                if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, force) {
+                    error!("package '{}' failed to build: {}", source.name, why);
+                    exit(1);
+                }
+
+                if let Err(why) = mv_to_pool(
+                    "build",
+                    &config.archive,
+                    &config.default_component,
+                    if source.keep_source { KEEP_SOURCE } else { 0 },
+                    Some(&source.name)
+                ) {
+                    error!("package '{}' failed to migrate to pool: {}", source.name, why);
                     exit(1);
                 }
 
@@ -59,8 +81,6 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                     break
                 }
             }
-
-            migrate_to_pool(config, sources.into_iter());
         },
         None => warn!("no packages built")
     }
@@ -103,6 +123,8 @@ pub enum BuildError {
     GitCommit { package: String, why: io::Error },
     #[fail(display = "failed to link {:?} to {:?}: {}", src, dst, why)]
     Link { src: PathBuf, dst: PathBuf, why: io::Error },
+    #[fail(display = "failed due to missing dependencies")]
+    MissingDependencies,
     #[fail(display = "no version listed in changelog for {}", package)]
     NoChangelogVersion { package: String },
     #[fail(display = "failed to open file at {:?}: {}", file, why)]
@@ -382,6 +404,16 @@ fn sbuild<P: AsRef<Path>>(
         let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", component].concat()), false)
             .flat_map(|deb| misc::match_deb(&deb, depends))
             .collect::<Vec<(String, usize)>>();
+
+        if depends.len() != temp.len() {
+            for dependency in depends {
+                if !temp.iter().any(|x| x.0.contains(dependency)) {
+                    error!("dependency for {} not found: {}", path.as_ref().display(), dependency)
+                }
+            }
+
+            return Err(BuildError::MissingDependencies);
+        }
 
         temp.sort_by(|a, b| a.1.cmp(&b.1));
         for &(ref p, _) in &temp {
