@@ -1,4 +1,5 @@
 use std::env;
+use std::fs;
 use std::io::{self, Error, ErrorKind};
 use std::process::Command;
 use std::path::Path;
@@ -6,8 +7,21 @@ use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
 
 pub fn generate(suite: &str, component: &str) -> io::Result<()> {
+    let metapackages = &Path::new("metapackages");
+    if !metapackages.exists() {
+        return Ok(());
+    }
+
+    info!("removing any leftover deb archives in the metapackages directory");
+    for entry in metapackages.read_dir()? {
+        let entry = entry?;
+        if entry.file_name().to_str().map_or(false, |e| e.ends_with(".deb")) {
+            fs::remove_file(entry.path())?;
+        }
+    }
+
     info!("generating metapackages");
-    WalkDir::new("metapackages")
+    WalkDir::new(metapackages)
         .min_depth(1)
         .max_depth(1)
         .into_iter()
