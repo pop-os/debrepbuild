@@ -2,7 +2,6 @@ use checksum::hasher;
 use config::Config;
 use debian;
 use debian::*;
-use debian::DebianArchive;
 use md5::Md5;
 use misc;
 use rayon;
@@ -194,13 +193,33 @@ pub(crate) fn dists(
         binary_suites(&pool_base.join(&component)).unwrap()
             .into_par_iter()
             .map(|(arch, path)| {
-                // Collect the entries for this architecture of this component
-                misc::walk_debs(&path, true)
+                // Collect a list of packages to process for this architecture.
+                let mut archives: HashMap<String, (String, PathBuf)> = HashMap::new();
+
+                // An iterator that returns debian archives found in the path.
+                let deb_iter = misc::walk_debs(&path, true)
                     .filter(|e| !e.file_type().is_dir())
                     .map(|e| e.path().to_path_buf())
-                    .collect::<Vec<PathBuf>>()
-                    .into_par_iter()
-                    .map(|debian_entry| {
+                    .collect::<Vec<PathBuf>>();
+
+                for package in deb_iter {
+                    if let Some((name, version)) = get_debian_package_info(&package) {
+                        match archives.entry(name) {
+                            Entry::Occupied(mut entry) => {
+                                if entry.get().0.lt(&version) {
+                                    entry.insert((version, package));
+                                }
+                            }
+                            Entry::Vacant(mut entry) => {
+                                entry.insert((version, package));
+                            }
+                        }
+                    }
+                }
+
+                // Collect the entries for this architecture of this component
+                archives.into_par_iter()
+                    .map(|(_, (_, debian_entry))| {
                         info!("processing contents of {:?}", debian_entry);
 
                         let arch: &str = &arch;
@@ -309,7 +328,6 @@ pub(crate) fn dists(
     // Re-enable duplicates checking.
     dist_files.compress_and_release(config, origin, None)
 }
-
 
 // NOTE: #1
 // Requires 1.26.0
