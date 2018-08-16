@@ -1,14 +1,14 @@
 pub mod archive;
 pub mod dist_files;
-pub mod files;
-pub mod misc;
-pub mod package;
+pub mod missing;
+pub mod info;
+pub mod repackage;
 
 pub use self::archive::*;
 pub use self::dist_files::*;
-pub use self::files::*;
-pub use self::misc::*;
-pub use self::package::*;
+pub use self::missing::*;
+pub use self::info::*;
+pub use self::repackage::*;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
