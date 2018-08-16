@@ -226,7 +226,7 @@ pub(crate) fn dists(
                         let component: &str = &component;
 
                         // Open the Debian archive, and get the IDs & required codecs for the inner control and data archives.
-                        let archive = DebianArchive::new(&debian_entry)?;
+                        let archive = debian::Archive::new(&debian_entry)?;
                         // Open the control file within the control archive and read each key / value pair into a map.
                         let control = archive.control()?;
 

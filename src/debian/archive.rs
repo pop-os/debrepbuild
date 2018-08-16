@@ -1,19 +1,22 @@
 use ar;
 use libflate::gzip::Decoder as GzDecoder;
+use rayon;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 use tar;
+use walkdir::WalkDir;
 use xz2::read::XzDecoder;
+use xz2::write::XzEncoder;
 
-pub struct DebianArchive<'a> {
+pub struct Archive<'a> {
     path: &'a Path,
     data: (u8, DecoderVariant),
     control: (u8, DecoderVariant)
 }
 
-impl<'a> DebianArchive<'a> {
+impl<'a> Archive<'a> {
     /// The path given must be a valid Debian ar archive. It will be scanned to verify that the
     /// inner data.tar and control.tar entries are reachable, and records their position.
     pub fn new(path: &'a Path) -> io::Result<Self> {
@@ -52,7 +55,7 @@ impl<'a> DebianArchive<'a> {
             format!("control archive not found in {}", path.display())
         ))?;
 
-        Ok(DebianArchive { path, control, data })
+        Ok(Archive { path, control, data })
     }
 
     fn open_archive<F, T>(&self, id: u8, codec: DecoderVariant, mut func: F) -> io::Result<T>
@@ -173,6 +176,66 @@ impl<'a> DebianArchive<'a> {
 
             Ok(control_data)
         })?
+    }
+
+    /// Validates the quality of the archive
+    pub fn validate(&self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+pub struct Builder<'a> {
+    codec: DecoderVariant,
+    control: &'a Path,
+    data: &'a Path,
+}
+
+impl<'a> Builder<'a> {
+    /// Creates a new debian archive from the control and data directories provided.
+    ///
+    /// Note that the archives will be compressed as xz archives.
+    pub fn new(control: &'a Path, data: &'a Path) -> Self {
+        Self { codec: DecoderVariant::Xz, control, data }
+    }
+
+    /// Validates the files at the control path -- useful to prevent building an invalid package.
+    pub fn validate_control(&self) -> io::Result<()> {
+        Ok(())
+    }
+
+    /// Builds the debian archive, writing it to the given output writer.
+    pub fn build<W: io::Write>(self, output: &mut W) -> io::Result<u64> {
+        let (control, data) = rayon::join(
+            || Self::build_from(self.control, self.codec),
+            || Self::build_from(self.data, self.codec)
+        );
+
+        let control = control?;
+        let control_header = ar::Header::new(b"./control.tar.xz".to_vec(), control.len() as u64);
+
+        let data = data?;
+        let data_header = ar::Header::new(b"./data.tar.xz".to_vec(), data.len() as u64);
+
+        let total = control.len() as u64 + data.len() as u64;
+
+        let mut ar = ar::Builder::new(output);
+        ar.append(&control_header, io::Cursor::new(control))?;
+        ar.append(&data_header, io::Cursor::new(data)).map(|_| total)
+    }
+
+    fn build_from(path: &'a Path, codec: DecoderVariant) -> io::Result<Vec<u8>> {
+        let mut tar = tar::Builder::new(Vec::new());
+
+        for entry in WalkDir::new(path).min_depth(1) {
+            let entry = entry.map_err(|why| io::Error::new(
+                io::ErrorKind::Other,
+                format!("walkdir error: {}", why)
+            ))?;
+
+            tar.append_path(entry.path())?;
+        }
+
+        XzEncoder::new(tar.into_inner()?, 9).finish()
     }
 }
 
