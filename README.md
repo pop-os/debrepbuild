@@ -7,6 +7,21 @@ may be found bellow.
 - [System76 CUDA Repo](https://github.com/system76/cuda)
 - [Pop!\_OS Proprietary Repo](https://github.com/pop-os/repo-proprietary)
 
+## Key Features
+
+- Can import pre-built Debian archives from external sources
+- Can repackage pre-built Debian archives
+- Can build packages from various sources, using `sbuild`
+- Supports multiple components within a suite
+- Supports migrating packages between components
+- Processes Debian archives within the pool in parallel.
+- Generates distribution file archives in parallel
+- Generates `Packages`, `Sources`, `Contents`, and `Release` dist files.
+- Repos will be `apt-file`-compatible
+
+## Todo
+
+- Generate Appstream + Icon archives
 
 ## Directory Structure
 

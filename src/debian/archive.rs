@@ -1,10 +1,12 @@
 use ar;
-use libflate::gzip::Decoder as GzDecoder;
+use libflate::gzip::{Decoder as GzDecoder, Encoder as GzEncoder, EncodeOptions as GzEncodeOptions};
 use rayon;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader};
-use std::path::Path;
+use std::io::{self, BufRead, BufReader, Write};
+use std::path::{Component, Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use subprocess::{Exec, Redirection};
 use tar;
 use walkdir::WalkDir;
 use xz2::read::XzDecoder;
@@ -59,7 +61,7 @@ impl<'a> Archive<'a> {
     }
 
     fn open_archive<F, T>(&self, id: u8, codec: DecoderVariant, mut func: F) -> io::Result<T>
-        where F: FnMut(&mut dyn io::Read) -> T,
+        where F: FnMut(&mut io::Read) -> T,
     {
         let mut archive = ar::Archive::new(File::open(self.path)?);
         let control = archive.jump_to_entry(id as usize)?;
@@ -204,27 +206,76 @@ impl<'a> Builder<'a> {
     }
 
     /// Builds the debian archive, writing it to the given output writer.
-    pub fn build<W: io::Write>(self, output: &mut W) -> io::Result<u64> {
+    pub fn build<W: io::Write>(self, output: &mut W) -> io::Result<()> {
         let (control, data) = rayon::join(
-            || Self::build_from(self.control, self.codec),
+            || Self::build_from(self.control, DecoderVariant::Gz),
             || Self::build_from(self.data, self.codec)
         );
 
+        // TODO: The following should not be required, but it doesn't work otherwise.
+
+        use tempfile::tempfile;
+        use std::io::Seek;
+
         let control = control?;
-        let control_header = ar::Header::new(b"./control.tar.xz".to_vec(), control.len() as u64);
+        let mut control_f = tempfile()?;
+        control_f.write_all(&control)?;
+        control_f.flush()?;
+        control_f.seek(io::SeekFrom::Start(0))?;
 
         let data = data?;
-        let data_header = ar::Header::new(b"./data.tar.xz".to_vec(), data.len() as u64);
+        let mut data_f = tempfile()?;
+        data_f.write_all(&data)?;
+        data_f.flush()?;
+        data_f.seek(io::SeekFrom::Start(0))?;
+
+        let mut debian_binary = tempfile()?;
+        debian_binary.write_all(b"2.0\n")?;
+        debian_binary.flush()?;
+        debian_binary.seek(io::SeekFrom::Start(0))?;
+
+        // TODO: Replace with this, once we figure out why it doesn't work.
+        // let control = control?;
+        // let control_header = cascade! {
+        //     ar::Header::new(b"control.tar".to_vec(), control.len() as u64);
+        //     ..set_mtime(now);
+        //     ..set_mode(0o644);
+        // };
+        //
+        // let data = data?;
+        // let data_header = cascade! {
+        //     ar::Header::new(b"data.tar".to_vec(), data.len() as u64);
+        //     ..set_mtime(now);
+        //     ..set_mode(0o644);
+        // };
 
         let total = control.len() as u64 + data.len() as u64;
 
         let mut ar = ar::Builder::new(output);
-        ar.append(&control_header, io::Cursor::new(control))?;
-        ar.append(&data_header, io::Cursor::new(data)).map(|_| total)
+        ar.append_file(b"control.tar.gz", &mut control_f)?;
+        ar.append_file(b"data.tar.xz", &mut data_f)?;
+        ar.append_file(b"debian-binary", &mut debian_binary)?;
+
+        Ok(())
+        // ar.append(&control_header, io::Cursor::new(control))?;
+        // ar.append(&data_header, io::Cursor::new(data)).map(|_| total)
     }
 
     fn build_from(path: &'a Path, codec: DecoderVariant) -> io::Result<Vec<u8>> {
         let mut tar = tar::Builder::new(Vec::new());
+
+        let mtime = SystemTime::now().duration_since(UNIX_EPOCH)
+            .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("{}", why)))?
+            .as_secs();
+
+        tar.append(&cascade! {
+            tar::Header::new_gnu();
+            ..set_mtime(mtime);
+            ..set_mode(0o755);
+            ..set_path("./");
+            ..set_entry_type(tar::EntryType::Directory);
+            ..set_cksum();
+        }, &mut io::empty())?;
 
         for entry in WalkDir::new(path).min_depth(1) {
             let entry = entry.map_err(|why| io::Error::new(
@@ -232,10 +283,46 @@ impl<'a> Builder<'a> {
                 format!("walkdir error: {}", why)
             ))?;
 
-            tar.append_path(entry.path())?;
+            let src_path = entry.path();
+            let tmp_path = src_path.strip_prefix(path).map_err(|_| io::Error::new(
+                io::ErrorKind::Other,
+                "failed to strip prefix"
+            ))?;
+
+            let tmp_path = PathBuf::from(["./", tmp_path.to_str().unwrap()].concat());
+
+            let mut as_path = PathBuf::new();
+            for comp in tmp_path.components() {
+                match comp {
+                    Component::CurDir => as_path.push("."),
+                    Component::Normal(c) => as_path.push(c),
+                    _ => continue
+                }
+            }
+
+            let as_path = PathBuf::from(["./", as_path.to_str().unwrap()].concat());
+
+            if src_path.is_dir() {
+                tar.append_dir(&as_path, src_path)?;
+            } else {
+                tar.append_file(&as_path, &mut File::open(src_path)?)?;
+            }
         }
 
-        XzEncoder::new(tar.into_inner()?, 9).finish()
+        let data = tar.into_inner()?;
+
+        match codec {
+            DecoderVariant::Xz => {
+                let mut encoder = XzEncoder::new(Vec::new(), 6);
+                encoder.write_all(&data)?;
+                encoder.finish()
+            }
+            DecoderVariant::Gz => {
+                let mut encoder = GzEncoder::new(Vec::new())?;
+                encoder.write_all(&data)?;
+                encoder.finish().into_result()
+            }
+        }
     }
 }
 

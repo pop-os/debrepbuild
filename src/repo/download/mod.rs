@@ -1,7 +1,6 @@
 mod direct;
 mod request;
 mod sources;
-mod url;
 
 use config::Config;
 use self::direct::DownloadResult;
