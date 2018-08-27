@@ -10,7 +10,8 @@ use std::process::exit;
 use reqwest::{self, Client};
 
 pub fn all(config: &Config) {
-    let mut package_failed = false;
+    let mut errors = Vec::new();
+
     if let Some(ref ddl_sources) = config.direct {
         for (id, result) in direct::parallel(ddl_sources, &config.archive, &config.default_component)
             .into_iter()
@@ -22,8 +23,9 @@ pub fn all(config: &Config) {
                     info!("package '{}' successfully downloaded {} bytes", name, bytes);
                 }
                 Err(why) => {
-                    error!("package '{}' failed to download: {}", name, why);
-                    package_failed = true;
+                    let msg = format!("package '{}' failed to download: {}", name, why);
+                    error!("{}", msg);
+                    errors.push(msg);
                 }
             }
         }
@@ -40,15 +42,16 @@ pub fn all(config: &Config) {
                     info!("package '{}' was successfully fetched", name);
                 }
                 Err(why) => {
-                    error!("package '{}' failed to download: {}", name, why);
-                    package_failed = true;
+                    let msg = format!("package '{}' failed to download: {}", name, why);
+                    error!("{}", msg);
+                    errors.push(msg);
                 }
             }
         }
     }
 
-    if package_failed {
-        error!("exiting due to error");
+    if ! errors.is_empty() {
+        error!("exiting due to error(s): {:#?}", errors);
         exit(1);
     }
 }
