@@ -161,9 +161,14 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
     archive.extract_data(&data_dir)?;
     archive.extract_control(&control_dir)?;
 
-    rsync(&data_replace, &parent)?;
-    rsync(&control_replace, &data_dir)?;
+    if data_replace.exists() {
+        rsync(&data_replace, &parent)?;
+    }
 
+    if control_replace.exists() {
+        rsync(&control_replace, &data_dir)?;
+    }
+    
     fs::create_dir_all(pool.parent().unwrap())?;
     debian::archive::build(&data_dir, pool)?;
 
