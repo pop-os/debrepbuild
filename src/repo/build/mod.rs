@@ -7,16 +7,17 @@ use super::super::SHARED_ASSETS;
 use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
 use super::version::{changelog, git};
 use self::rsync::rsync;
+use command::Command;
 use config::{Config, DebianPath, Direct, Source, SourceLocation};
 use debian;
 use glob::glob;
 use misc;
 use super::pool::{mv_to_pool, KEEP_SOURCE};
 use std::env;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command};
+use std::process::exit;
 use subprocess::{self, Exec, Redirection};
 use walkdir::WalkDir;
 
@@ -132,12 +133,11 @@ fn needs_to_repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<
 fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
     info!("repackaging {:?}", pool);
 
-    let data_replace = replace.join("data");
-    let control_replace = replace.join("control");
+    debug!("source: {:?}", source);
+    debug!("replace: {:?}", replace);
 
-    if ! data_replace.exists() {
-        fs::create_dir_all(&data_replace)?;
-    }
+    let data_replace = replace.join("data");
+    let control_replace = replace.join("DEBIAN");
 
     if ! control_replace.exists() {
         fs::create_dir_all(&control_replace)?;
@@ -145,29 +145,27 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
 
     let parent = source.parent().unwrap();
     let data_dir = parent.join("data");
-    let control_dir = parent.join("control");
-
-    if data_dir.exists() {
-        fs::remove_dir_all(&data_dir)?;
-    }
+    let control_dir = parent.join("data/DEBIAN");
 
     if control_dir.exists() {
         fs::remove_dir_all(&control_dir)?;
     }
 
+    if data_dir.exists() {
+        fs::remove_dir_all(&data_dir)?;
+    }
+
     fs::create_dir_all(&control_dir)?;
-    fs::create_dir_all(&data_dir)?;
 
     let archive = debian::Archive::new(source)?;
     archive.extract_data(&data_dir)?;
     archive.extract_control(&control_dir)?;
 
     rsync(&data_replace, &parent)?;
-    rsync(&control_replace, &parent)?;
+    rsync(&control_replace, &data_dir)?;
 
     fs::create_dir_all(pool.parent().unwrap())?;
-    let mut dst_archive = File::create(pool)?;
-    debian::archive::Builder::new(&control_dir, &data_dir).build(&mut dst_archive)?;
+    debian::archive::build(&data_dir, pool)?;
 
     Ok(())
 }
@@ -343,13 +341,11 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
     fs::remove_dir_all("/tmp/debrep/repo")?;
     Command::new("git")
         .args(&["clone", "-b", branch, url, "/tmp/debrep/repo"])
-        .status()?;
+        .run()?;
 
     Command::new("cp")
         .args(&["-r", "/tmp/debrep/repo/debian", "."])
-        .status()?;
-
-    Ok(())
+        .run()
 }
 
 fn pre_flight(

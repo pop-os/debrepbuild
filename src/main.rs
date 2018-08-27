@@ -36,6 +36,7 @@ extern crate serde_derive;
 
 mod cli;
 pub mod checksum;
+pub mod command;
 pub mod compress;
 pub mod config;
 pub mod debian;

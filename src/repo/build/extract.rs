@@ -1,6 +1,6 @@
 use std::{fs, io};
 use std::path::Path;
-use std::process::Command;
+use command::Command;
 
 pub fn extract(src: &Path, dst: &Path) -> io::Result<()>  {
     match src.file_name().and_then(|x| x.to_str()) {
@@ -28,12 +28,7 @@ fn unzip(path: &Path, dst: &Path) -> io::Result<()> {
             .arg(path)
             .arg("-d")
             .arg(dst)
-            .status()
-            .and_then(|x| if x.success() {
-                Ok(())
-            } else {
-                Err(io::Error::new(io::ErrorKind::Other, "unzip command failed"))
-            })
+            .run()
         )
 }
 
@@ -49,11 +44,6 @@ fn untar(path: &Path, dst: &Path) -> io::Result<()> {
             .arg("-C")
             .arg(dst)
             .args(&["--strip-components", "1"])
-            .status()
-            .and_then(|x| if x.success() {
-                Ok(())
-            } else {
-                Err(io::Error::new(io::ErrorKind::Other, "tar command failed"))
-            })
+            .run()
         )
 }

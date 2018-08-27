@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::io::{self, Error, ErrorKind};
-use std::process::Command;
+use command::Command;
 use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
@@ -51,25 +51,7 @@ fn inner_generate(entry: &DirEntry) -> io::Result<()> {
         format!("parent path not found from {}", path.display())
     ))?;
 
-    directory_scope(parent, move || {
-        let status = Command::new("equivs-build")
-            .arg(filename)
-            .status()
-            .map_err(|why| Error::new(
-                ErrorKind::Other,
-                format!("equivs-build failed to run: {}", why)
-            ))?;
-
-        if status.success() {
-            debug!("equivs-build succeeded for metapackage: {}", path.display());
-            Ok(())
-        } else {
-            Err(status.code().map_or_else(
-                || Error::new(ErrorKind::Other, "equivs-build exit status not found"),
-                |code| Error::new(ErrorKind::Other, format!("equivs-build exited with status of {}", code))
-            ))
-        }
-    })
+    directory_scope(parent, move || Command::new("equivs-build").arg(filename).run())
 }
 
 pub fn directory_scope<T, F: FnMut() -> io::Result<T>>(path: &Path, mut scope: F) -> io::Result<T> {
