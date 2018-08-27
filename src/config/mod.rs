@@ -1,8 +1,11 @@
+use debian::DEB_SOURCE_EXTENSIONS;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use toml::{self, de};
 use misc;
+use url::UrlTokenizer;
 
 mod source;
 
@@ -209,6 +212,17 @@ pub struct Direct {
     pub update:    Option<Update>,
 }
 
+/// Stores where the file can be downloaded, and where that file should be stored.
+#[derive(Debug)]
+pub struct BinaryDestinations {
+    /// Where the files to repackage with exist, and where the original package is stored.
+    pub assets: Option<(PathBuf, PathBuf)>,
+    /// Where the repackaged file will be stored.
+    pub pool: PathBuf,
+    /// Where the file can be obtained
+    pub url: String,
+}
+
 impl ConfigFetch for Direct {
     fn fetch<'a>(&'a self, key: &str) -> Option<Cow<'a, str>> {
         match key {
@@ -227,6 +241,78 @@ impl ConfigFetch for Direct {
         }
 
         Ok(())
+    }
+}
+
+impl Direct {
+    pub fn get_destinations(&self, suite: &str, component: &str) -> io::Result<Vec<BinaryDestinations>> {
+        let mut output = Vec::new();
+
+        fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
+            if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
+                [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
+            } else {
+                [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
+            }
+        }
+
+        for file_item in &self.urls {
+            let name: &str = file_item.name.as_ref().map_or(&self.name, |x| &x);
+            let url = UrlTokenizer::finalize(&file_item.url, name, &self.version)
+                .map_err(|text|
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unsupported variable: {}", text)
+                    )
+                )?;
+
+            let mut assets = None;
+
+            let pool = {
+                let file = &url[url.rfind('/').unwrap_or(0) + 1..];
+
+                let ext_pos = {
+                    let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
+                    match &file[ext_pos..] {
+                        "gz" | "xz" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
+                            ext_pos -= 4;
+                        }
+                        _ => ()
+                    }
+                    ext_pos
+                };
+
+                let extension = &file[ext_pos..];
+                let arch = match file_item.arch.as_ref() {
+                    Some(ref arch) => arch.as_str(),
+                    None => misc::get_arch_from_stem(&file[..ext_pos - 1]),
+                };
+
+                let filename = gen_filename(name, &self.version, arch, extension);
+                let dst = match extension {
+                    "tar.gz" | "tar.xz" | "dsc" => ["/", component, "/source/"].concat(),
+                    _ => ["/", component, "/binary-", arch, "/"].concat()
+                };
+
+                if extension == "deb" {
+                    let base = format!("assets/replace/{}{}/{}/", suite, dst, name);
+                    let files = PathBuf::from([&base, "files"].concat());
+                    debug!("{:?} exists?", files);
+                    if files.exists() {
+                        let replace = PathBuf::from([base.as_str(), filename.as_str()].concat());
+                        debug!("setting asset target to {:?}", replace);
+                        assets = Some((files, replace));
+                    }
+                }
+
+
+                PathBuf::from(["repo/pool/", suite, &dst, &name[0..1], "/", name, "/", &filename].concat())
+            };
+
+            output.push(BinaryDestinations { assets, pool, url });
+        }
+
+        Ok(output)
     }
 }
 

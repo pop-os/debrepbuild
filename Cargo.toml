@@ -40,6 +40,8 @@ tempdir = "0.3.7"
 toml = "0.4.6"
 walkdir = "2.1.4"
 xz2 = "0.1.5"
+cascade = "0.1.2"
+tempfile = "3.0.3"
 
 [build-dependencies]
 vergen = "0.1.1"

@@ -18,13 +18,18 @@ use std::process::{Command, Stdio};
 use compress::*;
 
 pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -> io::Result<()> {
+    let pool_path = PathBuf::from(pool_base).join("source");
+    if ! pool_path.exists() {
+        return Ok(());
+    }
+
     info!("generating sources index");
     let path = PathBuf::from([dist_base, "/", component, "/source/"].concat());
     fs::create_dir_all(&path)?;
 
     Command::new("apt-ftparchive")
         .arg("sources")
-        .arg(PathBuf::from(pool_base).join("source"))
+        .arg(pool_path)
         .stderr(Stdio::inherit())
         .stdout(Stdio::piped())
         .spawn()
@@ -226,7 +231,7 @@ pub(crate) fn dists(
                         let component: &str = &component;
 
                         // Open the Debian archive, and get the IDs & required codecs for the inner control and data archives.
-                        let archive = DebianArchive::new(&debian_entry)?;
+                        let archive = debian::Archive::new(&debian_entry)?;
                         // Open the control file within the control archive and read each key / value pair into a map.
                         let control = archive.control()?;
 

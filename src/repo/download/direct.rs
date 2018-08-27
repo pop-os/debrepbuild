@@ -1,13 +1,8 @@
 use rayon::prelude::*;
 use reqwest::Client;
 use std::io;
-use std::path::PathBuf;
-
 use config::Direct;
-use debian::DEB_SOURCE_EXTENSIONS;
-use misc;
 use super::request;
-use super::url::UrlTokenizer;
 
 /// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
@@ -18,59 +13,14 @@ pub enum DownloadResult {
 pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) -> io::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
-    fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
-        if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
-            [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
-        } else {
-            [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
-        }
-    }
-
     let mut downloaded = 0;
-    for file_item in &item.urls {
-        let name: &str = file_item.name.as_ref().map_or(&item.name, |x| &x);
-        let url = UrlTokenizer::finalize(&file_item.url, name, &item.version)
-            .map_err(|text|
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("unsupported variable: {}", text)
-                )
-            )?;
 
-        let destination = {
-            let file = &url[url.rfind('/').unwrap_or(0) + 1..];
-
-            let ext_pos = {
-                let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
-                match &file[ext_pos..] {
-                    "gz" | "xz" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
-                        ext_pos -= 4;
-                    }
-                    _ => ()
-                }
-                ext_pos
-            };
-
-            let extension = &file[ext_pos..];
-            let arch = match file_item.arch.as_ref() {
-                Some(ref arch) => arch.as_str(),
-                None => misc::get_arch_from_stem(&file[..ext_pos - 1]),
-            };
-
-            let filename = &gen_filename(name, &item.version, arch, extension);
-
-            let dst = match extension {
-                "tar.gz" | "tar.xz" | "dsc" => ["/", component, "/source/"].concat(),
-                _ => ["/", component, "/binary-", arch, "/"].concat()
-            };
-
-            PathBuf::from(
-                [ "repo/pool/", suite, &dst, &name[0..1], "/", name, "/", &filename ].concat()
-            )
-        };
-
-        let checksum = file_item.checksum.as_ref().map(|x| x.as_str());
-        downloaded += request::file(client, &url, checksum, &destination)?;
+    for (destination, path) in item.get_destinations(suite, component)?.into_iter().zip(item.urls.iter()) {
+        let checksum = path.checksum.as_ref().map(|x| x.as_str());
+        // If the file is to be repackaged, store it in the assets directory, else the pool.
+        let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
+        debug!("download {}? target {:?}", &item.name, target);
+        downloaded += request::file(client, &destination.url, checksum, target)?;
     }
 
     info!("finished downloading {}", &item.name);

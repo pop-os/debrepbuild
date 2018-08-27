@@ -7,7 +7,8 @@ use super::super::SHARED_ASSETS;
 use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
 use super::version::{changelog, git};
 use self::rsync::rsync;
-use config::{Config, DebianPath, Source, SourceLocation};
+use command::Command;
+use config::{Config, DebianPath, Direct, Source, SourceLocation};
 use debian;
 use glob::glob;
 use misc;
@@ -16,16 +17,19 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command};
+use std::process::exit;
 use subprocess::{self, Exec, Redirection};
 use walkdir::WalkDir;
 
 pub fn all(config: &Config) {
     let pwd = env::current_dir().unwrap();
+    let suite = &config.archive;
+    let component = &config.default_component;
+
     if let Some(ref sources) = config.source {
         migrate_to_pool(config, sources.iter());
         for source in sources {
-            if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, false) {
+            if let Err(why) = build(source, &pwd, suite, component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
@@ -41,6 +45,11 @@ pub fn all(config: &Config) {
                 exit(1);
             }
         }
+    }
+
+    if let Err(why) = repackage_binaries(config.direct.as_ref(), suite, component) {
+        error!("binary repackage failure: {}", why);
+        exit(1);
     }
 
     if let Err(why) = metapackages::generate(&config.archive, &config.default_component) {
@@ -84,6 +93,81 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
         },
         None => warn!("no packages built")
     }
+}
+
+fn repackage_binaries(packages: Option<&Vec<Direct>>, suite: &str, component: &str) -> io::Result<()> {
+    if let Some(packages) = packages {
+        for package in packages {
+            for destinations in package.get_destinations(suite, component).unwrap() {
+                debug!("destinations: {:#?}", destinations);
+                let pool = &destinations.pool;
+                if let Some(&(ref files, ref source_deb)) = destinations.assets.as_ref() {
+                    if needs_to_repackage(source_deb, files, pool)? {
+                        repackage(source_deb, files, pool)?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// If source binary exists, and the files to replace are newer than the file in the pool, repackage.
+fn needs_to_repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<bool> {
+    info!("checking if {:?} needs to be repackaged", pool);
+    if ! pool.exists() || ! source.exists() || ! replace.exists() {
+        return Ok(true);
+    }
+
+    let timestamp_in_pool = pool.metadata()?.modified()?;
+    for entry in WalkDir::new(replace).into_iter().flat_map(|e| e.ok()) {
+        if entry.metadata()?.modified()? > timestamp_in_pool {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
+    info!("repackaging {:?}", pool);
+
+    debug!("source: {:?}", source);
+    debug!("replace: {:?}", replace);
+
+    let data_replace = replace.join("data");
+    let control_replace = replace.join("DEBIAN");
+
+    if ! control_replace.exists() {
+        fs::create_dir_all(&control_replace)?;
+    }
+
+    let parent = source.parent().unwrap();
+    let data_dir = parent.join("data");
+    let control_dir = parent.join("data/DEBIAN");
+
+    if control_dir.exists() {
+        fs::remove_dir_all(&control_dir)?;
+    }
+
+    if data_dir.exists() {
+        fs::remove_dir_all(&data_dir)?;
+    }
+
+    fs::create_dir_all(&control_dir)?;
+
+    let archive = debian::Archive::new(source)?;
+    archive.extract_data(&data_dir)?;
+    archive.extract_control(&control_dir)?;
+
+    rsync(&data_replace, &parent)?;
+    rsync(&control_replace, &data_dir)?;
+
+    fs::create_dir_all(pool.parent().unwrap())?;
+    debian::archive::build(&data_dir, pool)?;
+
+    Ok(())
 }
 
 fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources: I) {
@@ -257,13 +341,11 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
     fs::remove_dir_all("/tmp/debrep/repo")?;
     Command::new("git")
         .args(&["clone", "-b", branch, url, "/tmp/debrep/repo"])
-        .status()?;
+        .run()?;
 
     Command::new("cp")
         .args(&["-r", "/tmp/debrep/repo/debian", "."])
-        .status()?;
-
-    Ok(())
+        .run()
 }
 
 fn pre_flight(

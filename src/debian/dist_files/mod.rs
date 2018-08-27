@@ -1,3 +1,5 @@
+mod package;
+
 use config::Config;
 use iter_reader::IteratorReader;
 use itertools::Itertools;
@@ -7,6 +9,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+pub use self::package::*;
 use super::*;
 
 pub struct DistFiles<'a> {

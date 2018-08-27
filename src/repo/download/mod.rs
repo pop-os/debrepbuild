@@ -1,7 +1,6 @@
 mod direct;
 mod request;
 mod sources;
-mod url;
 
 use config::Config;
 use self::direct::DownloadResult;
@@ -93,10 +92,8 @@ pub enum DownloadError {
     Open { file: PathBuf, why: io::Error },
     #[fail(display = "checksum for {} is invalid -- expected {}, but received {}", name, expected, received)]
     ChecksumInvalid { name: String, expected: String, received: String },
-    #[fail(display = "{} command failed to execute: {}", cmd, why)]
-    CommandFailed { cmd: &'static str, why: io::Error },
-    #[fail(display = "git exited with an error on job {}", name)]
-    GitFailed { name: String },
+    #[fail(display = "git exited with an error: {}", why)]
+    GitFailed { why: io::Error },
     #[fail(display = "failed to request data for {}: {}", name, why)]
     Request { name: String, why: reqwest::Error }
 }

@@ -1,11 +1,12 @@
+use command::Command;
 use config::{Source, SourceLocation};
 use checksum::hasher;
 use rayon::prelude::*;
 use reqwest;
 use sha2::Sha256;
 use std::fs::{self, File};
+use std::io;
 use std::path::PathBuf;
-use std::process::Command;
 use super::DownloadError;
 
 /// Downloads source code repositories in parallel.
@@ -18,7 +19,7 @@ pub fn download(item: &Source) -> Result<(), DownloadError> {
         Some(SourceLocation::Git { ref git, ref branch }) => {
             match *branch {
                 Some(ref _branch) => unimplemented!(),
-                None => download_git(git)
+                None => download_git(git).map_err(|why| DownloadError::GitFailed { why })
             }
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
@@ -77,7 +78,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 }
 
 /// Downloads the source repository via git, then attempts to build it.
-fn download_git(url: &str) -> Result<(), DownloadError> {
+fn download_git(url: &str) -> io::Result<()> {
     let name: String = {
         url.split_at(url.rfind('/').unwrap() + 1)
             .1
@@ -88,33 +89,13 @@ fn download_git(url: &str) -> Result<(), DownloadError> {
 
     if path.exists() {
         info!("pulling {}", name);
-        let exit_status = Command::new("git")
+        Command::new("git")
             .arg("-C")
             .arg(&path)
             .args(&["pull", "origin", "master"])
-            .status()
-            .map_err(|why| DownloadError::CommandFailed {
-                cmd: "git",
-                why,
-            })?;
-
-        if !exit_status.success() {
-            return Err(DownloadError::GitFailed { name: name.to_owned() });
-        }
+            .run()
     } else {
         info!("cloning {}", name);
-        let exit_status = Command::new("git")
-            .args(&["-C", "build", "clone", &url])
-            .status()
-            .map_err(|why| DownloadError::CommandFailed {
-                cmd: "git",
-                why,
-            })?;
-
-        if !exit_status.success() {
-            return Err(DownloadError::GitFailed { name: name.to_owned() });
-        }
+        Command::new("git").args(&["-C", "build", "clone", &url]).run()
     }
-
-    Ok(())
 }

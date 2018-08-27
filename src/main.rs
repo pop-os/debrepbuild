@@ -1,5 +1,7 @@
 extern crate ar;
 extern crate bus_writer;
+#[macro_use]
+extern crate cascade;
 extern crate deflate;
 extern crate digest;
 extern crate failure;
@@ -18,6 +20,7 @@ extern crate sha1;
 extern crate sha2;
 extern crate subprocess;
 extern crate tar;
+extern crate tempfile;
 extern crate toml;
 extern crate walkdir;
 extern crate xz2;
@@ -33,12 +36,14 @@ extern crate serde_derive;
 
 mod cli;
 pub mod checksum;
+pub mod command;
 pub mod compress;
 pub mod config;
 pub mod debian;
 pub mod iter_reader;
 pub mod misc;
 mod repo;
+pub mod url;
 
 use clap::{Arg, App, AppSettings, SubCommand};
 use cli::Action;
