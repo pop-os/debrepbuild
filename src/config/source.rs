@@ -38,7 +38,7 @@ pub struct Source {
     #[serde(default = "default_retain")]
     pub retain:           usize,
     #[serde(default = "default_requires_extract")]
-    pub requires_extract: bool,
+    pub extract: bool,
 }
 
 fn default_build_source() -> bool { true }
