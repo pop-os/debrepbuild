@@ -2,6 +2,7 @@ use checksum::hasher;
 use config::Config;
 use debian;
 use debian::*;
+use debarchive::Archive as DebArchive;
 use md5::Md5;
 use misc;
 use rayon;
@@ -231,9 +232,9 @@ pub(crate) fn dists(
                         let component: &str = &component;
 
                         // Open the Debian archive, and get the IDs & required codecs for the inner control and data archives.
-                        let archive = debian::Archive::new(&debian_entry)?;
+                        let archive = DebArchive::new(&debian_entry)?;
                         // Open the control file within the control archive and read each key / value pair into a map.
-                        let control = archive.control()?;
+                        let control = archive.control_map()?;
 
                         // The Contents archive requires that we know the package and section keys for each Debian package beforehand.
                         let package_name = match (control.get("Package"), control.get("Section")) {
@@ -248,7 +249,7 @@ pub(crate) fn dists(
                         };
 
                         // Now get a listing of all the files for the Contents archive.
-                        let mut files = Vec::new();
+                        let mut files: Vec<PathBuf> = Vec::new();
 
                         // Runs each scope in parallel to generate the contents and checksums.
                         let (content_res, ((sha1_res, sha256_res), (sha512_res, md5_res))) = {
@@ -268,7 +269,11 @@ pub(crate) fn dists(
                             };
 
                             rayon::join(
-                                || archive.data(|path| files.push(path.to_path_buf())),
+                                || archive.data(|entry| {
+                                    let path = entry.path()?;
+                                    files.push(path.to_path_buf());
+                                    Ok(())
+                                }),
                                 generate_hashes
                             )
                         };
