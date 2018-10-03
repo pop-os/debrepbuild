@@ -125,3 +125,8 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
     File::create(path)?.write_all(contents.as_ref())
 }
+
+pub fn copy<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> io::Result<()> {
+    io::copy(&mut File::open(src)?, &mut File::create(dst)?)?;
+    Ok(())
+}

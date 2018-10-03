@@ -270,8 +270,13 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
         let _ = fs::create_dir_all(&project_directory);
         let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
         let src = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
-        extract::extract(&src, &project_directory)
-            .map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
+        let result = if item.requires_extract {
+            extract::extract(&src, &project_directory)
+        } else {
+            misc::copy(&src, &project_directory.join(filename))
+        };
+
+        result.map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
     }
 
     let mut linked: Vec<LinkedArtifact> = Vec::new();
