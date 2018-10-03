@@ -10,6 +10,7 @@ use self::rsync::rsync;
 use command::Command;
 use config::{Config, DebianPath, Direct, Source, SourceLocation};
 use debian;
+use debarchive::Archive as DebArchive;
 use glob::glob;
 use misc;
 use super::pool::{mv_to_pool, KEEP_SOURCE};
@@ -157,9 +158,9 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
 
     fs::create_dir_all(&control_dir)?;
 
-    let archive = debian::Archive::new(source)?;
-    archive.extract_data(&data_dir)?;
-    archive.extract_control(&control_dir)?;
+    let archive = DebArchive::new(source)?;
+    archive.data_extract(&data_dir)?;
+    archive.control_extract(&control_dir)?;
 
     if data_replace.exists() {
         rsync(&data_replace, &parent)?;

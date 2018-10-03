@@ -1,7 +1,7 @@
-extern crate ar;
 extern crate bus_writer;
 #[macro_use]
 extern crate cascade;
+extern crate debarchive;
 extern crate deflate;
 extern crate digest;
 extern crate failure;
@@ -19,7 +19,6 @@ extern crate serde;
 extern crate sha1;
 extern crate sha2;
 extern crate subprocess;
-extern crate tar;
 extern crate tempfile;
 extern crate toml;
 extern crate walkdir;
