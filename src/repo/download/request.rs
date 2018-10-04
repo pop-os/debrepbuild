@@ -1,22 +1,47 @@
-use std::{fs, io};
-use std::fs::File;
-use std::path::Path;
 use checksum::hasher;
 use reqwest::Client;
 use sha2::Sha256;
+use std::{fs::{self, File}, io};
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
+use utime;
 
 const ATTEMPTS: u8 = 3;
 
-pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> io::Result<u64> {
+pub enum RequestCompare<'a> {
+    Checksum(Option<&'a str>),
+    SizeAndModification(u64, Option<i64>)
+}
+
+pub fn file(client: &Client, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
     let mut tries = 0;
     loop {
         let mut file = if path.exists() {
-            if let Some(checksum) = checksum {
-                let digest = hasher::<Sha256, File>(File::open(path)?)?;
-                if digest == checksum {
-                    info!("{} is already downloaded", path.display());
-                    return Ok(0);
+            let mut requires_download = true;
+
+            match compare {
+                RequestCompare::Checksum(Some(checksum)) => {
+                    let digest = hasher::<Sha256, File>(File::open(path)?)?;
+                    requires_download = digest != checksum;
                 }
+                RequestCompare::SizeAndModification(length, mtime) => {
+                    let file = File::open(path)?;
+                    let metadata = file.metadata()?;
+                    if metadata.len() == length {
+                        if let Some(modified) = mtime {
+                            if modified == metadata.mtime() {
+                                requires_download = false;
+                            }
+                        } else {
+                            requires_download = false;
+                        }
+                    }
+                }
+                _ => ()
+            }
+
+            if ! requires_download {
+                return Ok(0);
             }
 
             fs::OpenOptions::new()
@@ -32,7 +57,7 @@ pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> 
             File::create(path)?
         };
 
-        info!("downloading file from {} to {}", url, path.display());
+        info!("downloading package to {}", path.display());
         let downloaded = client
             .get(url)
             .send()
@@ -40,8 +65,9 @@ pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> 
             .copy_to(&mut file)
             .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest copy failed: {}", why)))?;
 
-        let digest = hasher::<Sha256, File>(File::open(path)?)?;
-        if let Some(checksum) = checksum {
+        info!("finished downloading {}", path.display());
+        if let RequestCompare::Checksum(Some(checksum)) = compare {
+            let digest = hasher::<Sha256, File>(File::open(path)?)?;
             if digest == checksum {
                 return Ok(downloaded);
             } else {
@@ -57,6 +83,10 @@ pub fn file(client: &Client, url: &str, checksum: Option<&str>, path: &Path) -> 
 
                 tries += 1;
             }
+        } else if let RequestCompare::SizeAndModification(_length, Some(mtime)) = compare {
+            let (atime, _) = utime::get_file_times(path)?;
+            utime::set_file_times(path, atime, mtime as u64)?;
+            return Ok(downloaded);
         } else {
             return Ok(downloaded);
         }

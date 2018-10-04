@@ -1,6 +1,8 @@
+extern crate apt_repo_crawler;
 extern crate bus_writer;
 #[macro_use]
 extern crate cascade;
+extern crate crossbeam_channel;
 extern crate debarchive;
 extern crate deflate;
 extern crate digest;
@@ -13,6 +15,7 @@ extern crate libc;
 extern crate libflate;
 extern crate md5;
 extern crate rayon;
+extern crate regex;
 extern crate reqwest;
 extern crate select;
 extern crate serde;
@@ -21,6 +24,7 @@ extern crate sha2;
 extern crate subprocess;
 extern crate tempfile;
 extern crate toml;
+extern crate utime;
 extern crate walkdir;
 extern crate xz2;
 
