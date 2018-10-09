@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use reqwest::Client;
 use std::io;
 use std::sync::Arc;
@@ -21,7 +22,7 @@ pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str
         // If the file is to be repackaged, store it in the assets directory, else the pool.
         let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
         debug!("download {}? target {:?}", &item.name, target);
-        downloaded += request::file(client.clone(), &destination.url, RequestCompare::Checksum(checksum), target)?;
+        downloaded += request::file(client.clone(), item.name.clone(), &destination.url, RequestCompare::Checksum(checksum), target)?;
     }
 
     info!("finished downloading {}", &item.name);
@@ -31,8 +32,16 @@ pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str
 /// Downloads pre-built Debian packages in parallel
 pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<io::Result<DownloadResult>> {
     let client = Arc::new(Client::new());
-    items
-        .par_iter()
-        .map(|item| download(client.clone(), item, suite, component))
-        .collect()
+
+    // Only up to 8 downloads at a time.
+    let thread_pool = ThreadPoolBuilder::new()
+        .num_threads(8)
+        .build()
+        .expect("failed to build thread pool");
+
+    thread_pool.install(|| {
+        items.par_iter()
+            .map(|item| download(client.clone(), item, suite, component))
+            .collect()
+    })
 }

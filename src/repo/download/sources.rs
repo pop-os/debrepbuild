@@ -2,6 +2,7 @@ use command::Command;
 use config::{Source, SourceLocation};
 use checksum::hasher;
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use reqwest;
 use sha2::Sha256;
 use std::fs::{self, File};
@@ -11,7 +12,13 @@ use super::DownloadError;
 
 /// Downloads source code repositories in parallel.
 pub fn parallel(items: &[Source]) -> Vec<Result<(), DownloadError>> {
-    items.par_iter().map(download).collect()
+    // Only up to 8 source clones at a time.
+    let thread_pool = ThreadPoolBuilder::new()
+        .num_threads(8)
+        .build()
+        .expect("failed to build thread pool");
+
+    thread_pool.install(move || items.par_iter().map(download).collect())
 }
 
 pub fn download(item: &Source) -> Result<(), DownloadError> {

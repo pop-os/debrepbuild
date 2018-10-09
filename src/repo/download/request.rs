@@ -15,9 +15,10 @@ pub enum RequestCompare<'a> {
     SizeAndModification(u64, Option<i64>)
 }
 
-pub fn file(client: Arc<Client>, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
+pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
     let mut tries = 0;
-    let filename = Arc::new(path.file_name().unwrap().to_str().unwrap().to_owned());
+
+    let name = Arc::new(name);
     loop {
         let mut file = if path.exists() {
             let mut requires_download = true;
@@ -61,12 +62,12 @@ pub fn file(client: Arc<Client>, url: &str, compare: RequestCompare, path: &Path
         };
 
         info!("downloading package to {}", path.display());
-        let filename = filename.clone();
+        let name = name.clone();
         let downloaded = ParallelGetter::new(url, &mut file)
             .client(client.clone())
             .threads(4)
             .callback(3000, Box::new(move |p, t| {
-                info!("{}: downloaded {} out of {} MiB", filename, p / 1024 / 1024, t / 1024 / 1024)
+                info!("{}: downloaded {} out of {} MiB", name, p / 1024 / 1024, t / 1024 / 1024)
             }))
             .get()? as u64;
 
