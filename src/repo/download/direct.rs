@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use reqwest::Client;
 use std::io;
+use std::sync::Arc;
 use config::Direct;
 use super::request::{self, RequestCompare};
 
@@ -10,7 +11,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) -> io::Result<DownloadResult> {
+pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str) -> io::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
     let mut downloaded = 0;
@@ -20,7 +21,7 @@ pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) ->
         // If the file is to be repackaged, store it in the assets directory, else the pool.
         let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
         debug!("download {}? target {:?}", &item.name, target);
-        downloaded += request::file(client, &destination.url, RequestCompare::Checksum(checksum), target)?;
+        downloaded += request::file(client.clone(), &destination.url, RequestCompare::Checksum(checksum), target)?;
     }
 
     info!("finished downloading {}", &item.name);
@@ -29,9 +30,9 @@ pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) ->
 
 /// Downloads pre-built Debian packages in parallel
 pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<io::Result<DownloadResult>> {
-    let client = Client::new();
+    let client = Arc::new(Client::new());
     items
         .par_iter()
-        .map(|item| download(&client, item, suite, component))
+        .map(|item| download(client.clone(), item, suite, component))
         .collect()
 }

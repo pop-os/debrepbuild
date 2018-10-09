@@ -8,6 +8,7 @@ use self::direct::DownloadResult;
 use std::io;
 use std::path::PathBuf;
 use std::process::exit;
+use std::sync::Arc;
 use reqwest::{self, Client};
 
 pub fn all(config: &Config) {
@@ -75,10 +76,11 @@ pub fn all(config: &Config) {
 // TODO: Optimize with a shrinking queue.
 pub fn packages(sources: &Config, packages: &[&str]) {
     let mut downloaded = 0;
+    let client = Arc::new(Client::new());
 
     if let Some(ref source) = sources.direct.as_ref() {
         for source in source.iter().filter(|s| packages.contains(&s.name.as_str())) {
-            if let Err(why) = direct::download(&Client::new(), source, &sources.archive, &sources.default_component) {
+            if let Err(why) = direct::download(client.clone(), source, &sources.archive, &sources.default_component) {
                 error!("failed to download {}: {}", &source.name, why);
                 exit(1);
             }
