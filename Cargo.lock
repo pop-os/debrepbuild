@@ -1021,7 +1021,7 @@ dependencies = [
 [[package]]
 name = "parallel-getter"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/parallel-getter#500d2a4bf223fb8c42664edcf19ed92a94f4ad5a"
+source = "git+https://github.com/pop-os/parallel-getter#f7b324f7e6e6a3a51171fc0acc153f0b7f64232b"
 dependencies = [
  "progress-streams 1.0.0 (git+https://github.com/pop-os/progress-streams)",
  "reqwest 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
