@@ -2,7 +2,7 @@ use rayon::prelude::*;
 use reqwest::Client;
 use std::io;
 use config::Direct;
-use super::request;
+use super::request::{self, RequestCompare};
 
 /// Possible messages that may be returned when a download has succeeded.
 pub enum DownloadResult {
@@ -20,7 +20,7 @@ pub fn download(client: &Client, item: &Direct, suite: &str, component: &str) ->
         // If the file is to be repackaged, store it in the assets directory, else the pool.
         let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
         debug!("download {}? target {:?}", &item.name, target);
-        downloaded += request::file(client, &destination.url, checksum, target)?;
+        downloaded += request::file(client, &destination.url, RequestCompare::Checksum(checksum), target)?;
     }
 
     info!("finished downloading {}", &item.name);

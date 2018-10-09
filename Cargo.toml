@@ -12,8 +12,11 @@ name = "debrep"
 path = "src/main.rs"
 
 [dependencies]
+apt-repo-crawler = { git = "https://github.com/pop-os/apt-repo-crawler" }
 bus_writer = "0.1"
+cascade = "0.1.2"
 clap = "2.32.0"
+crossbeam-channel = "0.2.6"
 debarchive = "0.1.0"
 deflate = { version = "0.7.18", features = ["gzip"] }
 digest = "0.7.5"
@@ -28,7 +31,8 @@ libflate = "0.1.18"
 log = { version = "0.4.3" }
 md-5 = "0.7.0"
 rayon = "1.0.2"
-reqwest = "0.8.5"
+regex = "1.0.5"
+reqwest = "0.9"
 select = "0.4.2"
 serde = "1.0.43"
 serde_derive = "1.0.43"
@@ -36,11 +40,11 @@ sha-1 = "0.7.0"
 sha2 = "0.7.1"
 subprocess = "0.1.13"
 tempdir = "0.3.7"
+tempfile = "3.0.3"
 toml = "0.4.6"
+utime = "0.2.2"
 walkdir = "2.1.4"
 xz2 = "0.1.5"
-cascade = "0.1.2"
-tempfile = "3.0.3"
 
 [build-dependencies]
 vergen = "0.1.1"

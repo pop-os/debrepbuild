@@ -1,4 +1,5 @@
 mod direct;
+mod repos;
 mod request;
 mod sources;
 
@@ -48,6 +49,21 @@ pub fn all(config: &Config) {
                 }
             }
         }
+    }
+
+    if let Some(ref repos) = config.repos {
+        match repos::download(repos, &config.archive, &config.default_component) {
+            Ok(()) => {
+                info!("all repos fetched successfully");
+            }
+            Err(why) => {
+                let msg = format!("repos failed to fetch: {}", why);
+                error!("{}", msg);
+                errors.push(msg);
+            }
+        }
+
+        eprintln!("repos downloaded");
     }
 
     if ! errors.is_empty() {
