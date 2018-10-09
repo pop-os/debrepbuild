@@ -1,9 +1,11 @@
 use checksum::hasher;
+use parallel_getter::ParallelGetter;
 use reqwest::Client;
 use sha2::Sha256;
 use std::{fs::{self, File}, io};
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+use std::sync::Arc;
 use utime;
 
 const ATTEMPTS: u8 = 3;
@@ -13,8 +15,9 @@ pub enum RequestCompare<'a> {
     SizeAndModification(u64, Option<i64>)
 }
 
-pub fn file(client: &Client, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
+pub fn file(client: Arc<Client>, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
     let mut tries = 0;
+    let filename = Arc::new(path.file_name().unwrap().to_str().unwrap().to_owned());
     loop {
         let mut file = if path.exists() {
             let mut requires_download = true;
@@ -58,12 +61,14 @@ pub fn file(client: &Client, url: &str, compare: RequestCompare, path: &Path) ->
         };
 
         info!("downloading package to {}", path.display());
-        let downloaded = client
-            .get(url)
-            .send()
-            .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest get failed: {}", why)))?
-            .copy_to(&mut file)
-            .map_err(|why| io::Error::new(io::ErrorKind::Other, format!("reqwest copy failed: {}", why)))?;
+        let filename = filename.clone();
+        let downloaded = ParallelGetter::new(url, &mut file)
+            .client(client.clone())
+            .threads(4)
+            .callback(3000, Box::new(move |p, t| {
+                info!("{}: downloaded {} out of {} MiB", filename, p / 1024 / 1024, t / 1024 / 1024)
+            }))
+            .get()? as u64;
 
         info!("finished downloading {}", path.display());
         if let RequestCompare::Checksum(Some(checksum)) = compare {

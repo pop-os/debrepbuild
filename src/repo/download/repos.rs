@@ -97,12 +97,13 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
             });
 
             // Main thread fetches packages in parallel
-            let client = Client::new();
+            let client = Arc::new(Client::new());
             *result = out_rx
                 .into_iter()
                 .par_bridge()
                 .map(|(url, compare, dest)| {
-                    request::file(&client, &url, compare, &dest)?;
+                    let client = client.clone();
+                    request::file(client, &url, compare, &dest)?;
                     Ok(())
                 })
                 .collect::<io::Result<()>>();
