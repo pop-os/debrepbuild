@@ -2,7 +2,7 @@ use apt_repo_crawler::{filename_from_url, AptCrawler, AptEntry, AptPackage};
 use config::Repo;
 use debian::gen_filename;
 use rayon::prelude::*;
-use rayon::scope;
+use rayon::{scope, ThreadPoolBuilder};
 use reqwest::Client;
 use std::cmp::Ordering;
 use std::io;
@@ -14,7 +14,7 @@ use super::request::{self, RequestCompare};
 pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> {
     let mut result = Ok(());
     let (in_tx, in_rx) = bounded::<AptEntry>(64);
-    let (out_tx, out_rx) = bounded::<(String, RequestCompare, PathBuf)>(64);
+    let (out_tx, out_rx) = bounded::<(String, String, RequestCompare, PathBuf)>(64);
 
     {
         let result = &mut result;
@@ -42,6 +42,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                 let send_func = |file: AptEntry| -> bool {
                     if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
                         out_tx.send((
+                            desc.name.to_owned(),
                             file.url.as_str().to_owned(),
                             RequestCompare::SizeAndModification(
                                 file.length,
@@ -96,17 +97,25 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                 if let Some(file) = latest { send_func(file); }
             });
 
-            // Main thread fetches packages in parallel
-            let client = Arc::new(Client::new());
-            *result = out_rx
-                .into_iter()
-                .par_bridge()
-                .map(|(url, compare, dest)| {
-                    let client = client.clone();
-                    request::file(client, &url, compare, &dest)?;
-                    Ok(())
-                })
-                .collect::<io::Result<()>>();
+            // Use a thread pool to ensure only up to 8 files are downloaded at the same time.
+            let thread_pool = ThreadPoolBuilder::new()
+                .num_threads(8)
+                .build()
+                .expect("failed to build thread pool");
+
+            thread_pool.install(move || {
+                // Main thread fetches packages in parallel
+                let client = Arc::new(Client::new());
+                *result = out_rx
+                    .into_iter()
+                    .par_bridge()
+                    .map(|(name, url, compare, dest)| {
+                        let client = client.clone();
+                        request::file(client, name, &url, compare, &dest)?;
+                        Ok(())
+                    })
+                    .collect::<io::Result<()>>();
+            });
         });
     }
 
