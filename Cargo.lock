@@ -359,6 +359,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "deb-version"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "debarchive"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -378,6 +383,7 @@ dependencies = [
  "cascade 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "deb-version 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "debarchive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "deflate 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "digest 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2156,6 +2162,7 @@ dependencies = [
 "checksum crossbeam-utils 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "677d453a17e8bd2b913fa38e8b9cf04bcdbb5be790aa294f2389661d72036015"
 "checksum cssparser 0.23.10 (registry+https://github.com/rust-lang/crates.io-index)" = "8f1c74d99b0f489cc546336b911452562ebfd4aec034b0c526cb77a3a02d3790"
 "checksum cssparser-macros 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "72b64d0d64184a082f38028396875c08c8ee083481f6f16e6e0cf52c338bd785"
+"checksum deb-version 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d03032384765c811f3f305a3d11372b97d8aff1091368622cbfeb3f839e2e77b"
 "checksum debarchive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b8f48dfd21bf1c4bf1b0f8599c293fa43c3cd191867173955b721dc7bfa3ad3"
 "checksum debug_unreachable 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9a032eac705ca39214d169f83e3d3da290af06d8d1d344d1baad2fd002dca4b3"
 "checksum deflate 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)" = "8a6abb26e16e8d419b5c78662aa9f82857c2386a073da266840e474d5055ec86"
