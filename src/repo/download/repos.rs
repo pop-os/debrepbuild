@@ -1,14 +1,15 @@
 use apt_repo_crawler::{filename_from_url, AptCrawler, AptEntry, AptPackage};
 use config::Repo;
+use crossbeam_channel::bounded;
+use deb_version;
 use debian::gen_filename;
-use rayon::prelude::*;
 use rayon::{scope, ThreadPoolBuilder};
+use rayon::prelude::*;
 use reqwest::Client;
 use std::cmp::Ordering;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crossbeam_channel::bounded;
 use super::request::{self, RequestCompare};
 
 pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> {
@@ -35,9 +36,6 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
 
             // Thread for filtering packages to download, based on filter patterns and old-ness.
             s.spawn(move |_| {
-                let mut current = String::new();
-                let mut latest: Option<AptEntry> = None;
-
                 // Sends data required by the file requester to the output channel.
                 let send_func = |file: AptEntry| -> bool {
                     if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
@@ -55,46 +53,44 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                     true
                 };
 
+                let mut files: Vec<AptEntry> = Vec::new();
+                let mut names: Vec<String> = Vec::new();
+                let mut versions: Vec<String> = Vec::new();
+
+                enum Insert {
+                    Append(String, String),
+                    Update(usize, String)
+                }
+
                 for file in in_rx {
-                    let mut send = false;
-                    let mut update = false;
+                    let mut update = None;
                     if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
-                        // `current` will differ from `desc.name` when a new package name is being scraped.
-                        if current != desc.name {
-                            current = desc.name.to_owned();
-                            update = if current == "" {
-                                true
-                            } else {
-                                send = true;
-                                match latest {
-                                    Some(ref prev_file) => {
-                                        AptPackage::from_str(filename_from_url(prev_file.url.as_str())).ok()
-                                            .map(|ref prev_desc| prev_desc.version.cmp(desc.version) != Ordering::Less)
-                                            .unwrap_or(false)
-                                    }
-                                    None => true
-                                }
-                            };
+                        if let Some(position) = names.iter().position(|name| name == desc.name) {
+                            if deb_version::compare_versions(&names[position], desc.version) == Ordering::Less {
+                                update = Some(Insert::Update(position, desc.version.to_owned()));
+                            }
+                        } else {
+                            update = Some(Insert::Append(desc.name.to_owned(), desc.version.to_owned()));
                         }
                     }
 
-                    // If the probed package is newer than the current one, or the current
-                    // package does not exist, this will update the latest detected package.
-                    if update {
-                        latest = Some(file);
-                    }
-
-                    // If it's been designated that this package will be submitted to the
-                    // file requester, this will do so.
-                    if send {
-                        if let Some(file) = latest.take() {
-                            if ! send_func(file) { break }
-                        }
+                    match update {
+                        Some(Insert::Append(name, version)) => {
+                            files.push(file);
+                            names.push(name);
+                            versions.push(version);
+                        },
+                        Some(Insert::Update(pos, version)) => {
+                            files[pos] = file;
+                            versions[pos] = version;
+                        },
+                        None => (),
                     }
                 }
 
-                // If the channel was closed while a package has not yet been submitted, do so.
-                if let Some(file) = latest { send_func(file); }
+                for entry in files {
+                    send_func(entry);
+                }
             });
 
             // Use a thread pool to ensure only up to 8 files are downloaded at the same time.

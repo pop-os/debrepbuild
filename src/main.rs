@@ -3,6 +3,7 @@ extern crate bus_writer;
 #[macro_use]
 extern crate cascade;
 extern crate crossbeam_channel;
+extern crate deb_version;
 extern crate debarchive;
 extern crate deflate;
 extern crate digest;

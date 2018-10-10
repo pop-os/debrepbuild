@@ -17,6 +17,7 @@ bus_writer = "0.1"
 cascade = "0.1.2"
 clap = "2.32.0"
 crossbeam-channel = "0.2.6"
+deb-version = "0.1.0"
 debarchive = "0.1.0"
 deflate = { version = "0.7.18", features = ["gzip"] }
 digest = "0.7.5"
