@@ -41,7 +41,7 @@ The root directory of a debrep-based repo will contain the following directories
   - On build, they'll be generated and placed into the repo.
 - **record/**: keeps tabs on what source packages have been built
 - **repo/**: Contains the archive & associated dist and pool directories for each
-- **sources.toml**: Configuration for the entire repo.
+- **suites/suite-name.toml**: Configuration files for each repo to build.
 
 ## Highly Parallel Distribution File Generation
 
@@ -147,20 +147,4 @@ debrep clean
 ### Remove packages
 ```
 debrep remove <PACKAGES>...
-```
-
-### Pretty-print the sources.toml configuration
-```
-debrep config
-```
-
-### Fetch a field from the configuration file
-```
-debrep config direct.atom-editor.version
-```
-
-### Update a field in the configuration file
-```
-deprep config direct.atom-editor.version ${NEW_VERSION}
-deprep config direct.atom-editor.url ${NEW_URL}
 ```

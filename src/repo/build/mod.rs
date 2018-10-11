@@ -17,6 +17,7 @@ use super::pool::{mv_to_pool, KEEP_SOURCE};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process::exit;
 use subprocess::{self, Exec, Redirection};
 use walkdir::WalkDir;

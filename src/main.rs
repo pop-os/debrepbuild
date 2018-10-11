@@ -55,7 +55,6 @@ use cli::Action;
 use config::{Config, ConfigFetch};
 use repo::{Packages, Repo};
 use std::{env, fs, io};
-use std::path::{Path, PathBuf};
 use std::process::exit;
 
 pub const SHARED_ASSETS: &str = "assets/share/";
@@ -157,7 +156,7 @@ fn read_configs(matches: &ArgMatches) -> io::Result<()> {
     let base_directory = env::current_dir()?;
     let mut configs = Vec::new();
 
-    for file in fs::read_dir(".")? {
+    for file in fs::read_dir("suites")? {
         let file = match file {
             Ok(file) => file,
             Err(_) => continue
@@ -170,8 +169,7 @@ fn read_configs(matches: &ArgMatches) -> io::Result<()> {
         };
 
         if filename.ends_with(".toml") {
-            let path = file.path();
-            let config = config::parse(path.clone()).map_err(|why| io::Error::new(
+            let config = config::parse(file.path()).map_err(|why| io::Error::new(
                 io::ErrorKind::Other,
                 format!("configuration parsing error: {}", why)
             ))?;
