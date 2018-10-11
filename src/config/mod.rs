@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 use toml::{self, de};
 use misc;
@@ -13,17 +14,14 @@ pub use self::direct::*;
 pub use self::repos::*;
 pub use self::source::*;
 
-/// Currently hard-coded to search for `sources.toml` in the current working directory.
-const SOURCES: &str = "sources.toml";
-
 #[derive(Debug, Fail)]
 pub enum ParsingError {
-    #[fail(display = "error reading '{}': {}", file, why)]
-    File { file: &'static str, why:  io::Error },
-    #[fail(display = "error writing '{}': {}", file, why)]
-    FileWrite { file: &'static str, why:  io::Error },
-    #[fail(display = "failed to parse TOML syntax in {}: {}", file, why)]
-    Toml { file: &'static str, why:  de::Error },
+    #[fail(display = "error reading {:?}: {}", file, why)]
+    File { file: PathBuf, why:  io::Error },
+    #[fail(display = "error writing {:?}: {}", file, why)]
+    FileWrite { file: PathBuf, why:  io::Error },
+    #[fail(display = "failed to parse TOML syntax in {:?}: {}", file, why)]
+    Toml { file: PathBuf, why:  de::Error },
     #[fail(display = "failed to serialize into TOML: {}", why)]
     TomlSerialize { why: toml::ser::Error },
     #[fail(display = "source URL and path defined for {}. Only one should be defined.", source)]
@@ -41,6 +39,8 @@ pub enum ConfigError {
 /// An in-memory representation of the Debian repository's TOML spec
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Config {
+    #[serde(skip)]
+    pub path: PathBuf,
     pub archive: String,
     pub version: String,
     pub origin: String,
@@ -61,9 +61,9 @@ impl Config {
         toml::ser::to_vec(self)
             .map_err(|why| ParsingError::TomlSerialize { why })
             .and_then(|data| {
-                File::create(SOURCES)
+                File::create(&self.path)
                     .and_then(|mut file| file.write_all(&data))
-                    .map_err(|why| ParsingError::FileWrite { file: SOURCES, why })
+                    .map_err(|why| ParsingError::FileWrite { file: self.path.clone(), why })
             })
     }
 
@@ -188,10 +188,13 @@ impl ConfigFetch for Config {
     }
 }
 
-pub fn parse() -> Result<Config, ParsingError> {
-    misc::read(SOURCES)
-        .map_err(|why| ParsingError::File { file: SOURCES, why })
+pub fn parse(path: PathBuf) -> Result<Config, ParsingError> {
+    let mut config: Config = misc::read(&path)
+        .map_err(|why| ParsingError::File { file: path.clone(), why })
         .and_then(|buffer| {
-            toml::from_slice(&buffer).map_err(|why| ParsingError::Toml { file: SOURCES, why })
-        })
+            toml::from_slice(&buffer).map_err(|why| ParsingError::Toml { file: path.clone(), why })
+        })?;
+
+    config.path = path;
+    Ok(config)
 }

@@ -17,7 +17,6 @@ use super::pool::{mv_to_pool, KEEP_SOURCE};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
 use std::process::exit;
 use subprocess::{self, Exec, Redirection};
 use walkdir::WalkDir;
@@ -100,7 +99,6 @@ fn repackage_binaries(packages: Option<&Vec<Direct>>, suite: &str, component: &s
     if let Some(packages) = packages {
         for package in packages {
             for destinations in package.get_destinations(suite, component).unwrap() {
-                debug!("destinations: {:#?}", destinations);
                 let pool = &destinations.pool;
                 if let Some(&(ref files, ref source_deb)) = destinations.assets.as_ref() {
                     if needs_to_repackage(source_deb, files, pool)? {
