@@ -44,7 +44,7 @@ subprocess = "0.1.13"
 tempdir = "0.3.7"
 tempfile = "3.0.3"
 toml = "0.4.6"
-utime = "0.2.2"
+utime = "=0.2.1"
 walkdir = "2.1.4"
 xz2 = "0.1.5"
 
