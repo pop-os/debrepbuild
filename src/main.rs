@@ -50,10 +50,11 @@ pub mod misc;
 mod repo;
 pub mod url;
 
-use clap::{Arg, App, AppSettings, SubCommand};
+use clap::{Arg, App, AppSettings, ArgMatches, SubCommand};
 use cli::Action;
-use config::ConfigFetch;
+use config::{Config, ConfigFetch};
 use repo::{Packages, Repo};
+use std::{env, fs, io};
 use std::process::exit;
 
 pub const SHARED_ASSETS: &str = "assets/share/";
@@ -145,66 +146,99 @@ fn main() {
                 .required(true))
         ).get_matches();
 
-    match config::parse() {
-        Ok(mut sources) => {
-            debug!("Config: {:#?}", sources);
-            match Action::new(&matches) {
-                Action::Build(packages, force) => {
-                    Repo::prepare(sources, Packages::Select(&packages, force))
-                        .download()
-                        .build()
-                        .generate();
-                },
-                Action::Clean => {
-                    Repo::prepare(sources, Packages::All).clean();
-                },
-                Action::Dist => {
-                    Repo::prepare(sources, Packages::All).generate();
-                },
-                Action::Fetch(key) => match sources.fetch(&key) {
-                    Some(value) => println!("{}: {}", key, value),
-                    None => {
-                        error!("config field not found");
-                        exit(1);
-                    }
-                },
-                Action::FetchConfig => println!("sources.toml: {:#?}", &sources),
-                Action::Migrate(packages, from_component, to_component) => {
-                    if let Err(why) = repo::migrate(&sources, &packages, from_component, to_component) {
-                        error!("migration failed: {}", why);
-                        exit(1);
-                    }
-                },
-                Action::Pool => {
-                    Repo::prepare(sources, Packages::All).download();
-                },
-                Action::Remove(packages) => {
-                    Repo::prepare(sources, Packages::Select(&packages, false)).remove();
-                },
-                Action::Update(key, value) => match sources.update(key, value.to_owned()) {
-                    Ok(()) => match sources.write_to_disk() {
-                        Ok(()) => info!("successfully wrote config changes to disk"),
-                        Err(why) => {
-                            error!("failed to write config changes: {}", why);
-                            exit(1);
-                        }
-                    },
-                    Err(why) => {
-                        error!("failed to update {}: {}", key, why);
-                        exit(1);
-                    }
-                },
-                Action::UpdateRepository => {
-                    Repo::prepare(sources, Packages::All)
-                        .download()
-                        .build()
-                        .generate();
-                }
+    if let Err(why) = read_configs(&matches) {
+        eprintln!("failed to apply configs: {}", why);
+        exit(1);
+    }
+}
+
+fn read_configs(matches: &ArgMatches) -> io::Result<()> {
+    let base_directory = env::current_dir()?;
+    let mut configs = Vec::new();
+
+    for file in fs::read_dir("suites")? {
+        let file = match file {
+            Ok(file) => file,
+            Err(_) => continue
+        };
+
+        let filename = file.file_name();
+        let filename = match filename.as_os_str().to_str() {
+            Some(filename) => filename,
+            None => continue
+        };
+
+        if filename.ends_with(".toml") {
+            let config = config::parse(file.path()).map_err(|why| io::Error::new(
+                io::ErrorKind::Other,
+                format!("configuration parsing error: {}", why)
+            ))?;
+
+            configs.push(config);
+        }
+    }
+
+    for config in configs {
+        apply_config(config, matches);
+        env::set_current_dir(&base_directory)?;
+    }
+
+    Ok(())
+}
+
+fn apply_config(mut config: Config, matches: &ArgMatches) {
+    info!("Building from config at {}", config.path.display());
+    match Action::new(&matches) {
+        Action::Build(packages, force) => {
+            Repo::prepare(config, Packages::Select(&packages, force))
+                .download()
+                .build()
+                .generate();
+        },
+        Action::Clean => {
+            Repo::prepare(config, Packages::All).clean();
+        },
+        Action::Dist => {
+            Repo::prepare(config, Packages::All).generate();
+        },
+        Action::Fetch(key) => match config.fetch(&key) {
+            Some(value) => println!("{}: {}", key, value),
+            None => {
+                error!("config field not found");
+                exit(1);
             }
         },
-        Err(why) => {
-            error!("configuration parsing error: {}", why);
-            exit(1);
+        Action::FetchConfig => println!("{}: {:#?}", config.path.display(), &config),
+        Action::Migrate(packages, from_component, to_component) => {
+            if let Err(why) = repo::migrate(&config, &packages, from_component, to_component) {
+                error!("migration failed: {}", why);
+                exit(1);
+            }
+        },
+        Action::Pool => {
+            Repo::prepare(config, Packages::All).download();
+        },
+        Action::Remove(packages) => {
+            Repo::prepare(config, Packages::Select(&packages, false)).remove();
+        },
+        Action::Update(key, value) => match config.update(key, value.to_owned()) {
+            Ok(()) => match config.write_to_disk() {
+                Ok(()) => info!("successfully wrote config changes to disk"),
+                Err(why) => {
+                    error!("failed to write config changes: {}", why);
+                    exit(1);
+                }
+            },
+            Err(why) => {
+                error!("failed to update {}: {}", key, why);
+                exit(1);
+            }
+        },
+        Action::UpdateRepository => {
+            Repo::prepare(config, Packages::All)
+                .download()
+                .build()
+                .generate();
         }
     }
 }

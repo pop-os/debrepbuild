@@ -21,7 +21,6 @@ pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str
         let checksum = path.checksum.as_ref().map(|x| x.as_str());
         // If the file is to be repackaged, store it in the assets directory, else the pool.
         let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
-        debug!("download {}? target {:?}", &item.name, target);
         downloaded += request::file(client.clone(), item.name.clone(), &destination.url, RequestCompare::Checksum(checksum), target)?;
     }
 

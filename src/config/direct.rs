@@ -98,7 +98,6 @@ impl Direct {
                 if extension == "deb" {
                     let base = format!("assets/replace/{}{}/{}/", suite, dst, name);
                     let files = PathBuf::from([&base, "files"].concat());
-                    debug!("{:?} exists?", files);
                     if files.exists() {
                         let replace = PathBuf::from([base.as_str(), filename.as_str()].concat());
                         debug!("setting asset target to {:?}", replace);

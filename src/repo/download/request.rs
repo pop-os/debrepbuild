@@ -66,7 +66,9 @@ pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompar
         let downloaded = ParallelGetter::new(url, &mut file)
             .client(client.clone())
             .threads(4)
-            .callback(3000, Arc::new(move |p, t| {
+            .threshold_memory(10 * 1024 * 1024)
+            .threshold_parallel(1024 * 1024)
+            .callback(1000, Box::new(move |p, t| {
                 info!("{}: downloaded {} out of {} MiB", name, p / 1024 / 1024, t / 1024 / 1024)
             }))
             .get()? as u64;
