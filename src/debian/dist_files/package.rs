@@ -41,7 +41,9 @@ impl PackageEntry {
         macro_rules! optional_map {
             ($key:expr) => {
                 if let Some(value) = control.remove($key) {
-                    write_entry(&mut output, $key.as_bytes(), value.as_bytes())
+                    if let Some(value) = value.lines().next() {
+                        write_entry(&mut output, $key.as_bytes(), value.as_bytes());
+                    }
                 }
             };
         }
@@ -53,6 +55,7 @@ impl PackageEntry {
         optional_map!("Auto-Built-Package");
         write_from_map!("Priority");
         write_from_map!("Section");
+        write_entry(&mut output, b"Origin", origin.as_bytes());
         write_from_map!("Maintainer");
         write_from_map!("Installed-Size");
         optional_map!("Provides");
@@ -61,13 +64,14 @@ impl PackageEntry {
         optional_map!("Recommends");
         optional_map!("Suggests");
         optional_map!("Conflicts");
-        write_entry(&mut output, b"Origin", origin.as_bytes());
+        optional_map!("Breaks");
+        optional_map!("Replaces");
         if let Some(bugs) = bugs {
             write_entry(&mut output, b"Bugs", bugs.as_bytes());
         }
         write_entry(&mut output, b"Filename", self.filename.as_os_str().as_bytes());
         write_entry(&mut output, b"Size", self.size.to_string().as_bytes());
-        write_entry(&mut output, b"Md5Sum", self.md5sum.as_bytes());
+        write_entry(&mut output, b"MD5sum", self.md5sum.as_bytes());
         write_entry(&mut output, b"SHA1", self.sha1.as_bytes());
         write_entry(&mut output, b"SHA256", self.sha256.as_bytes());
         write_entry(&mut output, b"SHA512", self.sha512.as_bytes());
