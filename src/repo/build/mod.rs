@@ -29,6 +29,7 @@ pub fn all(config: &Config) {
 
     if let Some(ref sources) = config.source {
         migrate_to_pool(config, sources.iter());
+        let build_path = ["build/", &config.archive].concat();
         for source in sources {
             if let Err(why) = build(source, &pwd, suite, component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
@@ -36,7 +37,7 @@ pub fn all(config: &Config) {
             }
 
             if let Err(why) = mv_to_pool(
-                "build",
+                &build_path,
                 &config.archive,
                 &config.default_component,
                 if source.keep_source { KEEP_SOURCE } else { 0 },
@@ -69,6 +70,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                 .collect::<Vec<&Source>>();
 
             migrate_to_pool(config, sources.iter().cloned());
+            let build_path = ["build/", &config.archive].concat();
             for source in &sources {
                 if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, force) {
                     error!("package '{}' failed to build: {}", source.name, why);
@@ -76,7 +78,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                 }
 
                 if let Err(why) = mv_to_pool(
-                    "build",
+                    &build_path,
                     &config.archive,
                     &config.default_component,
                     if source.keep_source { KEEP_SOURCE } else { 0 },
@@ -176,9 +178,10 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
 }
 
 fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources: I) {
+    let build_path = ["build/", &config.archive].concat();
     for source in sources {
         if let Err(why) = mv_to_pool(
-            "build",
+            &build_path,
             &config.archive,
             &config.default_component,
             if source.keep_source { KEEP_SOURCE } else { 0 },
@@ -260,7 +263,7 @@ fn fetch_assets(
 /// Attempts to build Debian packages from a given software repository.
 pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
-    let project_directory = pwd.join(&["build/", &item.name].concat());
+    let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
 
     if let Some(SourceLocation::URL { ref url, .. }) = item.location {
         if project_directory.exists() {
@@ -331,7 +334,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
         }
     }
 
-    let _ = env::set_current_dir("build");
+    let _ = env::set_current_dir(&["build/", suite].concat());
 
     pre_flight(
         item,
@@ -342,7 +345,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
         force,
     )?;
 
-    let _ = env::set_current_dir("..");
+    let _ = env::set_current_dir("../..");
     Ok(())
 }
 
@@ -368,7 +371,7 @@ fn pre_flight(
 ) -> Result<(), BuildError> {
     let name = &item.name;
     let build_on = item.build_on.as_ref().map(|x| x.as_str());
-    let record_path = PathBuf::from(["../record/", suite, "/", &name].concat());
+    let record_path = PathBuf::from(["../../record/", suite, "/", &name].concat());
 
     enum Record {
         Changelog(String),

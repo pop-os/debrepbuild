@@ -12,11 +12,10 @@ pub const PACKAGE_ASSETS: &str = "assets/packages/";
 pub fn create_missing_directories(suite: &str) -> io::Result<()> {
     let record = ["record/", suite].concat();
     let logs = ["logs/", suite].concat();
-    [CACHED_ASSETS, SHARED_ASSETS, PACKAGE_ASSETS, "build", &record, &logs].iter()
+    let build = ["build/", suite].concat();
+    [CACHED_ASSETS, SHARED_ASSETS, PACKAGE_ASSETS, &build, &record, &logs].iter()
         .map(|dir| if Path::new(dir).exists() { Ok(()) } else { fs::create_dir_all(dir) })
         .collect::<io::Result<()>>()
-
-    
 }
 
 pub fn package_cleanup(config: &Config) -> io::Result<()> {

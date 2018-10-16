@@ -7,7 +7,7 @@ use walkdir::{DirEntry, WalkDir};
 use super::super::pool::{mv_to_pool, ARCHIVES_ONLY};
 
 pub fn generate(suite: &str, component: &str) -> io::Result<()> {
-    let metapackages = &Path::new("metapackages");
+    let metapackages = &Path::new("metapackages").join(suite);
     if !metapackages.exists() {
         return Ok(());
     }
@@ -34,7 +34,7 @@ pub fn generate(suite: &str, component: &str) -> io::Result<()> {
         })
         .collect::<io::Result<()>>()?;
 
-    mv_to_pool("metapackages", suite, component, ARCHIVES_ONLY, None)
+    mv_to_pool(&metapackages, suite, component, ARCHIVES_ONLY, None)
 }
 
 fn is_cfg(entry: &DirEntry) -> bool {
