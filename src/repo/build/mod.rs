@@ -312,7 +312,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
                 })?;
         }
         None => {
-            let debian_path = pwd.join(&["debian/", &item.name, "/"].concat());
+            let debian_path = pwd.join(&["debian/", suite, "/", &item.name, "/"].concat());
             if debian_path.exists() {
                 let project_debian_path = project_directory.join("debian");
                 rsync(&debian_path, &project_debian_path)
@@ -368,7 +368,7 @@ fn pre_flight(
 ) -> Result<(), BuildError> {
     let name = &item.name;
     let build_on = item.build_on.as_ref().map(|x| x.as_str());
-    let record_path = PathBuf::from(["../record/", &name].concat());
+    let record_path = PathBuf::from(["../record/", suite, "/", &name].concat());
 
     enum Record {
         Changelog(String),
@@ -479,7 +479,7 @@ fn sbuild<P: AsRef<Path>>(
     component: &str,
     path: P,
 ) -> Result<(), BuildError> {
-    let log_path = pwd.join(["logs/", &item.name].concat());
+    let log_path = pwd.join(["logs/", suite, "/", &item.name].concat());
     let mut command = Exec::cmd("sbuild")
         .args(&["-v", "--log-external-command-output", "--log-external-command-error", "-d", suite])
         .stdout(Redirection::Merge)

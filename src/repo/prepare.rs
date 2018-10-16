@@ -9,10 +9,14 @@ pub const CACHED_ASSETS: &str = "assets/cache/";
 pub const SHARED_ASSETS: &str = "assets/share/";
 pub const PACKAGE_ASSETS: &str = "assets/packages/";
 
-pub fn create_missing_directories() -> io::Result<()> {
-    [CACHED_ASSETS, SHARED_ASSETS, PACKAGE_ASSETS, "build", "record", "sources", "logs"].iter()
+pub fn create_missing_directories(suite: &str) -> io::Result<()> {
+    let record = ["record/", suite].concat();
+    let logs = ["logs/", suite].concat();
+    [CACHED_ASSETS, SHARED_ASSETS, PACKAGE_ASSETS, "build", &record, &logs].iter()
         .map(|dir| if Path::new(dir).exists() { Ok(()) } else { fs::create_dir_all(dir) })
         .collect::<io::Result<()>>()
+
+    
 }
 
 pub fn package_cleanup(config: &Config) -> io::Result<()> {
@@ -31,7 +35,7 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
         for source in sources {
             if source.retain != 0 {
                 if let Some("changelog") = source.build_on.as_ref().map(|x| x.as_str()) {
-                    let cpath = PathBuf::from(["debian/", &source.name, "/changelog"].concat());
+                    let cpath = PathBuf::from(["debian/", &config.archive, "/", &source.name, "/changelog"].concat());
                     if cpath.exists() {
                         let keep = changelog(&cpath, source.retain)?;
                         for (file, version) in locate_files(&source.name, &config.archive) {
