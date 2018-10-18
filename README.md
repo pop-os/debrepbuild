@@ -31,17 +31,20 @@ The root directory of a debrep-based repo will contain the following directories
   - **cache/**: files which debrep downloads from external sources, and should be cached between runs
   - **share/**: files that can be shared across packages, and are specified in the TOML config
   - **packages/**: files which are automatically linked to the build before building
-- **build/**: debrep performs all builds within this directory.
+  - **replace/${suite}/${component}/${arch}/package/files/**: Repackage prepackaged archives
+    - **DEBIAN**: control archive files to replace
+    - **data**: data archive files to replace
+- **build/${suite}/**: debrep performs all builds within this directory.
   - Every file is linked / sourced here at build time.
   - After each successful build, files are moved into the repo.
-- **debian/**: contains the debian configuration for each source package that needs one.
+- **debian/${suite}/**: contains the debian configuration for each source package that needs one.
   - The directories within must have the same name as the source package they reference.
   - Each package directory contains the entire contents of the debian directory for that package.
-- **metapackages/**: place your `metapackage.cfg` equivs files in here.
+- **metapackages/${suite/**: place your `metapackage.cfg` equivs files in here.
   - On build, they'll be generated and placed into the repo.
-- **record/**: keeps tabs on what source packages have been built
+- **record/${suite}/**: keeps tabs on what source packages have been built
 - **repo/**: Contains the archive & associated dist and pool directories for each
-- **suites/suite-name.toml**: Configuration files for each repo to build.
+- **suites/${suite}.toml**: Configuration files for each repo to build.
 
 ## Highly Parallel Distribution File Generation
 

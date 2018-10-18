@@ -11,22 +11,22 @@ use std::path::PathBuf;
 use super::DownloadError;
 
 /// Downloads source code repositories in parallel.
-pub fn parallel(items: &[Source]) -> Vec<Result<(), DownloadError>> {
+pub fn parallel(items: &[Source], suite: &str) -> Vec<Result<(), DownloadError>> {
     // Only up to 8 source clones at a time.
     let thread_pool = ThreadPoolBuilder::new()
         .num_threads(8)
         .build()
         .expect("failed to build thread pool");
 
-    thread_pool.install(move || items.par_iter().map(download).collect())
+    thread_pool.install(move || items.par_iter().map(|i| download(i, suite)).collect())
 }
 
-pub fn download(item: &Source) -> Result<(), DownloadError> {
+pub fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     match item.location {
         Some(SourceLocation::Git { ref git, ref branch }) => {
             match *branch {
                 Some(ref _branch) => unimplemented!(),
-                None => download_git(git).map_err(|why| DownloadError::GitFailed { why })
+                None => download_git(git, suite).map_err(|why| DownloadError::GitFailed { why })
             }
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
@@ -85,14 +85,14 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 }
 
 /// Downloads the source repository via git, then attempts to build it.
-fn download_git(url: &str) -> io::Result<()> {
+fn download_git(url: &str, suite: &str) -> io::Result<()> {
     let name: String = {
         url.split_at(url.rfind('/').unwrap() + 1)
             .1
             .replace(".git", "")
     };
 
-    let path = PathBuf::from(["build/", &name].concat());
+    let path = PathBuf::from(["build/", suite, "/", &name].concat());
 
     if path.exists() {
         info!("pulling {}", name);
@@ -103,6 +103,7 @@ fn download_git(url: &str) -> io::Result<()> {
             .run()
     } else {
         info!("cloning {}", name);
-        Command::new("git").args(&["-C", "build", "clone", &url]).run()
+        let path = ["build/", suite].concat();
+        Command::new("git").args(&["-C", &path, "clone", &url]).run()
     }
 }

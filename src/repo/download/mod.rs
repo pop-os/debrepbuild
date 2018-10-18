@@ -34,7 +34,7 @@ pub fn all(config: &Config) {
     }
 
     if let Some(ref sources) = config.source {
-        for (id, result) in sources::parallel(sources)
+        for (id, result) in sources::parallel(sources, &config.archive)
             .into_iter()
             .enumerate()
         {
@@ -94,7 +94,7 @@ pub fn packages(sources: &Config, packages: &[&str]) {
 
     if let Some(ref source) = sources.source.as_ref() {
         for source in source.iter().filter(|s| packages.contains(&s.name.as_str())) {
-            if let Err(why) = sources::download(source) {
+            if let Err(why) = sources::download(source, &sources.archive) {
                 error!("failed to download source {}: {}", &source.name, why);
                 exit(1);
             }

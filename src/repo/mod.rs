@@ -28,7 +28,7 @@ pub struct Repo<'a> {
 
 impl<'a> Repo<'a> {
     pub fn prepare(config: Config, packages: Packages<'a>) -> Repo<'a> {
-        if let Err(why) = prepare::create_missing_directories() {
+        if let Err(why) = prepare::create_missing_directories(&config.archive) {
             error!("unable to create directories in current directory: {}", why);
             exit(1);
         }
