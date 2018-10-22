@@ -1,20 +1,16 @@
 use checksum::hasher;
 use config::Config;
-use debian;
-use debian::*;
+use debian::{self, *};
 use debarchive::Archive as DebArchive;
 use md5::Md5;
 use misc;
-use rayon;
-use rayon::prelude::*;
+use rayon::{self, prelude::*};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
+use std::cmp::Ordering;
 use std::collections::hash_map::{HashMap, Entry};
-use std::env;
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::{env, fs::{self, File}, io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}};
+use deb_version::compare_versions;
 
 use compress::*;
 
@@ -212,7 +208,8 @@ pub(crate) fn dists(
                     if let Some((name, version)) = get_debian_package_info(&package) {
                         match archives.entry(name) {
                             Entry::Occupied(mut entry) => {
-                                if entry.get().0.lt(&version) {
+                                if compare_versions(&entry.get().0, &version) == Ordering::Less {
+                                    eprintln!("replacing {} with {}", entry.get().0, &version);
                                     entry.insert((version, package));
                                 }
                             }
