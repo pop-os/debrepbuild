@@ -43,7 +43,6 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
     for entry in path.read_dir()? {
         let entry = entry?;
         let path = entry.path();
-        eprintln!("found {}", path.display());
         if path.is_dir() || (flags & ARCHIVES_ONLY != 0 && !is_archive(&path)) {
             continue;
         }
