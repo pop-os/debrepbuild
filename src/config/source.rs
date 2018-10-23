@@ -31,6 +31,7 @@ pub struct Source {
     pub starting_build:   Option<Vec<String>>,
     pub prebuild:         Option<Vec<String>>,
     pub build_on:         Option<String>,
+    pub repos:            Option<Vec<String>>,
     #[serde(default = "default_build_source")]
     pub keep_source:      bool,
     pub debian:           Option<DebianPath>,

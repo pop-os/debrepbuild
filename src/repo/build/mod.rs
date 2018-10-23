@@ -3,23 +3,25 @@ mod extract;
 mod metapackages;
 mod rsync;
 
-use super::super::SHARED_ASSETS;
-use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
-use super::version::{changelog, git};
-use self::rsync::rsync;
 use command::Command;
 use config::{Config, DebianPath, Direct, Source, SourceLocation};
-use debian;
+use deb_version;
 use debarchive::Archive as DebArchive;
+use debian;
 use glob::glob;
 use misc;
-use super::pool::{mv_to_pool, KEEP_SOURCE};
+use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
+use self::rsync::rsync;
+use std::cmp::Ordering;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use subprocess::{self, Exec, Redirection};
+use super::pool::{mv_to_pool, KEEP_SOURCE};
+use super::super::SHARED_ASSETS;
+use super::version::{changelog, git};
 use walkdir::WalkDir;
 
 pub fn all(config: &Config) {
@@ -31,7 +33,7 @@ pub fn all(config: &Config) {
         migrate_to_pool(config, sources.iter());
         let build_path = ["build/", &config.archive].concat();
         for source in sources {
-            if let Err(why) = build(source, &pwd, suite, component, false) {
+            if let Err(why) = build(config, source, &pwd, suite, component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
@@ -72,7 +74,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
             migrate_to_pool(config, sources.iter().cloned());
             let build_path = ["build/", &config.archive].concat();
             for source in &sources {
-                if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, force) {
+                if let Err(why) = build(config, source, &pwd, &config.archive, &config.default_component, force) {
                     error!("package '{}' failed to build: {}", source.name, why);
                     exit(1);
                 }
@@ -261,7 +263,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
+pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
 
@@ -337,6 +339,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
     let _ = env::set_current_dir(&["build/", suite].concat());
 
     pre_flight(
+        config,
         item,
         &pwd,
         suite,
@@ -362,6 +365,7 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
 }
 
 fn pre_flight(
+    config: &Config,
     item: &Source,
     pwd: &Path,
     suite: &str,
@@ -454,7 +458,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(item, &pwd, suite, component, dir)?;
+    sbuild(config, item, &pwd, suite, component, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -476,6 +480,7 @@ fn pre_flight(
 }
 
 fn sbuild<P: AsRef<Path>>(
+    config: &Config,
     item: &Source,
     pwd: &Path,
     suite: &str,
@@ -484,7 +489,11 @@ fn sbuild<P: AsRef<Path>>(
 ) -> Result<(), BuildError> {
     let log_path = pwd.join(["logs/", suite, "/", &item.name].concat());
     let mut command = Exec::cmd("sbuild")
-        .args(&["-v", "--log-external-command-output", "--log-external-command-error", "-d", suite])
+        .args(&[
+            "-v", "--log-external-command-output", "--log-external-command-error",
+            // "--dpkg-source-opt=-Zgzip", // Use this when testing
+            "-d", suite
+        ])
         .stdout(Redirection::Merge)
         .stderr(Redirection::File(
             fs::OpenOptions::new()
@@ -496,9 +505,33 @@ fn sbuild<P: AsRef<Path>>(
         ));
 
     if let Some(ref depends) = item.depends {
-        let mut temp = misc::walk_debs(&pwd.join(&["repo/pool/", suite, "/", component].concat()), false)
-            .flat_map(|deb| misc::match_deb(&deb, depends))
-            .collect::<Vec<(String, usize)>>();
+        let pool = pwd.join(&["repo/pool/", suite, "/", component].concat());
+        let deb_iter = misc::walk_debs(&pool, false)
+            .flat_map(|deb| misc::match_deb(&deb, depends));
+        
+        let mut temp: Vec<(String, usize, String, String)> = Vec::new();
+        for (deb, pos) in deb_iter {
+            let (name, version) = debian::get_debian_package_info(&Path::new(&deb))
+                .expect("failed to get debian name & version");
+            
+            let mut found = false;
+            for stored_dep in &mut temp {
+                if stored_dep.2 == name {
+                    found = true;
+                    if deb_version::compare_versions(&stored_dep.3, &version) == Ordering::Less {
+                        stored_dep.0 = deb.clone();
+                        stored_dep.1 = pos.clone();
+                        stored_dep.2 = name.clone();
+                        stored_dep.3 = version.clone();
+                        continue
+                    }
+                }
+            }
+
+            if ! found {
+                temp.push((deb, pos, name, version));
+            }
+        }
 
         if depends.len() != temp.len() {
             for dependency in depends {
@@ -511,8 +544,18 @@ fn sbuild<P: AsRef<Path>>(
         }
 
         temp.sort_by(|a, b| a.1.cmp(&b.1));
-        for &(ref p, _) in &temp {
+        for &(ref p, _, _, _) in &temp {
             command = command.arg(&["--extra-package=", &p].concat());
+        }
+    }
+
+    for key in &config.extra_keys {
+        command = command.arg(&format!("--extra-repository-key={}", key.display()));
+    }
+
+    if let Some(repos) = config.extra_repos.as_ref() {
+        for repo in repos {
+            command = command.arg(&["--extra-repository=", &repo].concat());
         }
     }
 
