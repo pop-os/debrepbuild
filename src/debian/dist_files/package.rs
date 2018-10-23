@@ -52,6 +52,7 @@ impl PackageEntry {
         optional_map!("Package-Type");
         write_from_map!("Architecture");
         write_from_map!("Version");
+        optional_map!("Multi-Arch");
         optional_map!("Auto-Built-Package");
         write_from_map!("Priority");
         write_from_map!("Section");
