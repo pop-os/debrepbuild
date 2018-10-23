@@ -33,7 +33,7 @@ pub fn all(config: &Config) {
         migrate_to_pool(config, sources.iter());
         let build_path = ["build/", &config.archive].concat();
         for source in sources {
-            if let Err(why) = build(source, &pwd, suite, component, false) {
+            if let Err(why) = build(config, source, &pwd, suite, component, false) {
                 error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
@@ -74,7 +74,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
             migrate_to_pool(config, sources.iter().cloned());
             let build_path = ["build/", &config.archive].concat();
             for source in &sources {
-                if let Err(why) = build(source, &pwd, &config.archive, &config.default_component, force) {
+                if let Err(why) = build(config, source, &pwd, &config.archive, &config.default_component, force) {
                     error!("package '{}' failed to build: {}", source.name, why);
                     exit(1);
                 }
@@ -263,7 +263,7 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
+pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
 
@@ -339,6 +339,7 @@ pub fn build(item: &Source, pwd: &Path, suite: &str, component: &str, force: boo
     let _ = env::set_current_dir(&["build/", suite].concat());
 
     pre_flight(
+        config,
         item,
         &pwd,
         suite,
@@ -364,6 +365,7 @@ fn merge_branch(url: &str, branch: &str) -> io::Result<()> {
 }
 
 fn pre_flight(
+    config: &Config,
     item: &Source,
     pwd: &Path,
     suite: &str,
@@ -456,7 +458,7 @@ fn pre_flight(
         None => None,
     };
 
-    sbuild(item, &pwd, suite, component, dir)?;
+    sbuild(config, item, &pwd, suite, component, dir)?;
 
     let result = match record {
         Some(Record::Changelog(version)) => {
@@ -478,6 +480,7 @@ fn pre_flight(
 }
 
 fn sbuild<P: AsRef<Path>>(
+    config: &Config,
     item: &Source,
     pwd: &Path,
     suite: &str,
@@ -543,6 +546,16 @@ fn sbuild<P: AsRef<Path>>(
         temp.sort_by(|a, b| a.1.cmp(&b.1));
         for &(ref p, _, _, _) in &temp {
             command = command.arg(&["--extra-package=", &p].concat());
+        }
+    }
+
+    for key in &config.extra_keys {
+        command = command.arg(&format!("--extra-repository-key={}", key.display()));
+    }
+
+    if let Some(repos) = config.extra_repos.as_ref() {
+        for repo in repos {
+            command = command.arg(&["--extra-repository=", &repo].concat());
         }
     }
 

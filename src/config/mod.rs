@@ -1,7 +1,8 @@
 use std::borrow::Cow;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::ffi::OsStr;
 
 use toml::{self, de};
 use misc;
@@ -54,6 +55,9 @@ pub struct Config {
     pub repos: Option<Vec<Repo>>,
     #[serde(default = "default_component")]
     pub default_component: String,
+    pub extra_repos: Option<Vec<String>>,
+    #[serde(skip)]
+    pub extra_keys: Vec<PathBuf>,
 }
 
 impl Config {
@@ -196,5 +200,15 @@ pub fn parse(path: PathBuf) -> Result<Config, ParsingError> {
         })?;
 
     config.path = path;
+    if let Ok(key_dir) = fs::read_dir("keys") {
+        for key in key_dir.flat_map(|x| x.ok()) {
+            let path = key.path();
+            if path.extension().map_or(false, |e| e == OsStr::new("asc")) {
+                if let Ok(path) = path.canonicalize() {
+                    config.extra_keys.push(path);
+                }
+            }
+        }
+    }
     Ok(config)
 }
