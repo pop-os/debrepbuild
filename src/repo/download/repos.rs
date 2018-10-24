@@ -66,7 +66,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                     let mut update = None;
                     if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
                         if let Some(position) = names.iter().position(|name| name == desc.name) {
-                            if deb_version::compare_versions(&names[position], desc.version) == Ordering::Less {
+                            if deb_version::compare_versions(&versions[position], desc.version) == Ordering::Less {
                                 update = Some(Insert::Update(position, desc.version.to_owned()));
                             }
                         } else {
