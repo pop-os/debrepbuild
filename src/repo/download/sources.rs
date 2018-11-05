@@ -24,7 +24,7 @@ pub fn parallel(items: &[Source], suite: &str) -> Vec<Result<(), DownloadError>>
 pub fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     match item.location {
         Some(SourceLocation::Git { ref git, ref branch, ref commit }) => {
-            download_git(git, suite, branch, commit).map_err(|why| DownloadError::GitFailed { why })
+            download_git(&item.name, git, suite, branch, commit).map_err(|why| DownloadError::GitFailed { why })
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
             download_(item, url, checksum)
@@ -90,21 +90,15 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 ///
 /// - If the build directory does not exist, it will be cloned.
 /// - Otherwise, the sources will be pulled from the build directory.
-fn download_git(url: &str, suite: &str, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
-    let name: String = {
-        url.split_at(url.rfind('/').unwrap() + 1)
-            .1
-            .replace(".git", "")
-    };
-
+fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
     let path = env::current_dir()
         .expect("failed to get current directory")
         .join(["build/", suite].concat());
 
-    let path_with_name = path.join(&name);
+    let path_with_name = path.join(name);
 
     let clone = || -> io::Result<()> {
-        Command::new("git").arg("-C").arg(&path).args(&["clone", &url]).run()
+        Command::new("git").arg("-C").arg(&path).args(&["clone", &url, name]).run()
     };
 
     let pull = |branch: &str| -> io::Result<()> {
@@ -118,6 +112,8 @@ fn download_git(url: &str, suite: &str, branch: &Option<String>, commit: &Option
     let reset = || -> io::Result<()> {
         if let Some(commit) = commit {
             Command::new("git")
+                .arg("-C")
+                .arg(&path_with_name)
                 .args(&["reset", "--hard", &commit])
                 .run()?;
         }
@@ -128,7 +124,11 @@ fn download_git(url: &str, suite: &str, branch: &Option<String>, commit: &Option
     let checkout = || -> io::Result<&str> {
         match branch {
             Some(branch) => {
-                Command::new("git").args(&["checkout", &branch]).run()?;
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&path_with_name)
+                    .args(&["checkout", &branch])
+                    .run()?;
                 Ok(branch.as_str())
             }
             None => Ok("master")
@@ -140,6 +140,8 @@ fn download_git(url: &str, suite: &str, branch: &Option<String>, commit: &Option
 
         if let Some(commit) = commit {
             let current_revision = Command::new("git")
+                .arg("-C")
+                .arg(&path_with_name)
                 .args(&["rev-parse", branch])
                 .run_with_stdout()?;
 
