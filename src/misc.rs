@@ -11,6 +11,10 @@ use walkdir::{DirEntry, WalkDir};
 pub const INCLUDE_DDEB: u8 = 1;
 pub const INCLUDE_SRCS: u8 = 2;
 
+pub fn filename_from_url(url: &str) -> &str {
+    &url[url.rfind('/').map_or(0, |x| x + 1)..]
+}
+
 // Recursively removes directories from the given path, if the directories or their subdirectories
 // are empty.
 pub fn remove_empty_directories_from(directory: &Path) -> io::Result<bool> {
@@ -82,6 +86,23 @@ pub fn match_deb(entry: &DirEntry, packages: &[String]) -> Option<(String, usize
         packages.iter().position(|x| x.as_str() == package)
             .and_then(|pos| path.to_str().map(|path| (path.to_owned(), pos)))
     })
+}
+
+pub fn copy_here<S>(source: S) -> io::Result<()>
+    where S: AsRef<Path>,
+{
+    for entry in source.as_ref().read_dir()? {
+        let entry = entry?;
+        if entry.path().is_file() {
+            let source = &entry.path();
+            if let Some(dest) = source.file_name() {
+                eprintln!("copying {:?} to {:?}", source, dest);
+                io::copy(&mut File::open(source)?, &mut File::create(dest)?)?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn unlink(link: &Path) -> io::Result<()> {

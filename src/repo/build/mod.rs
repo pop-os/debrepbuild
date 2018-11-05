@@ -172,7 +172,7 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
     if control_replace.exists() {
         rsync(&control_replace, &data_dir)?;
     }
-    
+
     fs::create_dir_all(pool.parent().unwrap())?;
     debian::archive::build(&data_dir, pool)?;
 
@@ -209,6 +209,8 @@ pub enum BuildError {
     DebFile { path: PathBuf, why: io::Error },
     #[fail(display = "failed to create directory for {:?}: {}", path, why)]
     Directory { path: PathBuf, why: io::Error },
+    #[fail(display = "failed to move dsc files: {:?}", why)]
+    DscMove { why: io::Error },
     #[fail(display = "failed to extract {:?} to {:?}: {}", src, dst, why)]
     Extract { src: PathBuf, dst: PathBuf, why: io::Error },
     #[fail(display = "failed to switch to branch {} on {}: {}", branch, package, why)]
@@ -266,87 +268,103 @@ fn fetch_assets(
 pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
+    let mut dsc_file = None;
 
-    if let Some(SourceLocation::URL { ref url, .. }) = item.location {
-        if project_directory.exists() {
-            let _ = fs::remove_dir_all(&project_directory);
+    match item.location {
+        Some(SourceLocation::URL { ref url, .. }) => {
+            if project_directory.exists() {
+                let _ = fs::remove_dir_all(&project_directory);
+            }
+
+            let _ = fs::create_dir_all(&project_directory);
+            let filename = misc::filename_from_url(url);
+            let src = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
+            let result = if item.extract {
+                extract::extract(&src, &project_directory)
+            } else {
+                misc::copy(&src, &project_directory.join(filename))
+            };
+
+            result.map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
         }
-
-        let _ = fs::create_dir_all(&project_directory);
-        let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
-        let src = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
-        let result = if item.extract {
-            extract::extract(&src, &project_directory)
-        } else {
-            misc::copy(&src, &project_directory.join(filename))
-        };
-
-        result.map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
+        Some(SourceLocation::Dsc { ref dsc }) => {
+            dsc_file = Some(misc::filename_from_url(dsc));
+        }
+        _ => (),
     }
 
     let mut linked: Vec<LinkedArtifact> = Vec::new();
 
-    match pwd.join(&["assets/packages/", &item.name].concat()) {
-        ref local_assets if local_assets.exists() => {
-            fetch_assets(&mut linked, local_assets, &project_directory)?;
-        },
-        _ => ()
-    }
+    if dsc_file.is_none() {
+        match pwd.join(&["assets/packages/", &item.name].concat()) {
+            ref local_assets if local_assets.exists() => {
+                fetch_assets(&mut linked, local_assets, &project_directory)?;
+            },
+            _ => ()
+        }
 
-    if let Some(ref assets) = item.assets {
-        for asset in assets {
-            if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
-                for file in globs.flat_map(|x| x.ok()) {
-                    let dst = project_directory.join(&asset.dst);
-                    linked.push(link_artifact(&file, &dst)?);
+        if let Some(ref assets) = item.assets {
+            for asset in assets {
+                if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
+                    for file in globs.flat_map(|x| x.ok()) {
+                        let dst = project_directory.join(&asset.dst);
+                        linked.push(link_artifact(&file, &dst)?);
+                    }
                 }
             }
         }
-    }
 
-    match item.debian {
-        Some(DebianPath::URL { ref url, ref checksum }) => {
-            unimplemented!()
-        }
-        Some(DebianPath::Branch { ref url, ref branch }) => {
-            merge_branch(url, branch)
-                .map_err(|why| BuildError::GitBranch {
-                    package: item.name.clone(),
-                    branch: branch.clone(),
-                    why
-                })?;
-        }
-        None => {
-            let debian_path = pwd.join(&["debian/", suite, "/", &item.name, "/"].concat());
-            if debian_path.exists() {
-                let project_debian_path = project_directory.join("debian");
-                rsync(&debian_path, &project_debian_path)
-                    .map_err(|why| BuildError::Rsync {
-                        src: debian_path,
-                        dst: project_debian_path.clone(),
+        match item.debian {
+            Some(DebianPath::URL { ref url, ref checksum }) => {
+                unimplemented!()
+            }
+            Some(DebianPath::Branch { ref url, ref branch }) => {
+                merge_branch(url, branch)
+                    .map_err(|why| BuildError::GitBranch {
+                        package: item.name.clone(),
+                        branch: branch.clone(),
                         why
                     })?;
+            }
+            None => {
+                let debian_path = pwd.join(&["debian/", suite, "/", &item.name, "/"].concat());
+                if debian_path.exists() {
+                    let project_debian_path = project_directory.join("debian");
+                    rsync(&debian_path, &project_debian_path)
+                        .map_err(|why| BuildError::Rsync {
+                            src: debian_path,
+                            dst: project_debian_path.clone(),
+                            why
+                        })?;
 
-                debian::create_missing_files(&project_debian_path)
-                    .map_err(|why| BuildError::DebFile {
-                        path: project_debian_path,
-                        why
-                    })?;
+                    debian::create_missing_files(&project_debian_path)
+                        .map_err(|why| BuildError::DebFile {
+                            path: project_debian_path,
+                            why
+                        })?;
+                }
             }
         }
     }
 
     let _ = env::set_current_dir(&["build/", suite].concat());
 
-    pre_flight(
+    let skipped = pre_flight(
         config,
         item,
         &pwd,
         suite,
         component,
+        dsc_file,
         &project_directory,
         force,
     )?;
+
+    if !skipped && dsc_file.is_some() {
+        misc::copy_here(&item.name).map_err(|why| {
+            BuildError::DscMove { why }
+        })?;
+    }
 
     let _ = env::set_current_dir("../..");
     Ok(())
@@ -370,97 +388,132 @@ fn pre_flight(
     pwd: &Path,
     suite: &str,
     component: &str,
+    dsc: Option<&str>,
     dir: &Path,
     force: bool
-) -> Result<(), BuildError> {
+) -> Result<bool, BuildError> {
     let name = &item.name;
-    let build_on = item.build_on.as_ref().map(|x| x.as_str());
     let record_path = PathBuf::from(["../../record/", suite, "/", &name].concat());
 
-    enum Record {
+    enum Record<'a> {
+        Dsc(&'a str),
         Changelog(String),
         Commit(String, String),
         CommitAppend(String, String),
     }
 
-    let record = match build_on {
-        Some("changelog") => {
-            let version = changelog(&dir.join("debian/changelog"), 1)
-                .map_err(|why| BuildError::Changelog {
+    fn compare_record<F>(force: bool, record_path: &Path, mut compare: F) -> Result<bool, BuildError>
+        where F: FnMut(::std::str::Lines) -> Result<bool, BuildError>
+    {
+        if !force && record_path.exists() {
+            let record = misc::read_to_string(&record_path)
+                .map_err(|why| BuildError::Read { file: record_path.to_owned(), why })?;
+            return compare(record.lines())
+        }
+
+        Ok(false)
+    }
+
+    let mut skip = false;
+    let record = if let Some(dsc) = dsc {
+        skip = compare_record(force, &record_path, |mut lines| {
+            if let (Some(source), Some(recorded_version)) = (lines.next(), lines.next()) {
+                if source == "dsc" && recorded_version == dsc {
+                    return Ok(true);
+                }
+            }
+
+            info!("building {} at dsc version {}", name, dsc);
+            Ok(false)
+        })?;
+
+        Some(Record::Dsc(dsc))
+    } else {
+        match item.build_on.as_ref().map(|x| x.as_str()) {
+            Some("changelog") => {
+                let version = changelog(&dir.join("debian/changelog"), 1)
+                    .map_err(|why| BuildError::Changelog {
+                        package: item.name.clone(),
+                        why
+                    }).and_then(|x| x.into_iter().next().ok_or_else(|| BuildError::NoChangelogVersion {
+                        package: item.name.clone(),
+                    }))?;
+
+                skip = compare_record(force, &record_path, |mut lines| {
+                    if let (Some(source), Some(recorded_version)) = (lines.next(), lines.next()) {
+                        if source == "changelog" && recorded_version == version {
+                            return Ok(true);
+                        }
+                    }
+
+                    info!("building {} at changelog version {}", name, version);
+                    Ok(false)
+                })?;
+
+                Some(Record::Changelog(version))
+            }
+            Some("commit") => {
+                let (branch, commit) = git(dir).map_err(|why| BuildError::GitCommit {
                     package: item.name.clone(),
                     why
-                }).and_then(|x| x.into_iter().next().ok_or_else(|| BuildError::NoChangelogVersion {
-                    package: item.name.clone(),
-                }))?;
+                })?;
 
-            if !force && record_path.exists() {
-                let record = misc::read_to_string(&record_path)
-                    .map_err(|why| BuildError::Read { file: record_path.clone(), why })?;
-                let mut record = record.lines();
-
-                if let Some(source) = record.next() {
-                    if let Some(recorded_version) = record.next() {
-                        if source == "changelog" && recorded_version == version {
-                            info!("{} has already been built -- skipping", name);
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-
-            info!("building {} at changelog version {}", name, version);
-            Some(Record::Changelog(version))
-        }
-        Some("commit") => {
-            let (branch, commit) = git(dir).map_err(|why| BuildError::GitCommit {
-                package: item.name.clone(),
-                why
-            })?;
-
-            let mut append = false;
-
-            if !force && record_path.exists() {
-                let record = misc::read_to_string(&record_path)
-                    .map_err(|why| BuildError::Read { file: record_path.clone(), why })?;
-                let mut record = record.lines();
-
-                if let Some(source) = record.next() {
-                    if source == "commit" {
-                        for branch_entry in record {
-                            let mut fields = branch_entry.split_whitespace();
-                            if let (Some(rec_branch), Some(rec_commit)) =
-                                (fields.next(), fields.next())
-                            {
-                                if rec_branch == branch && rec_commit == commit {
-                                    info!("{} has already been built -- skipping", name);
-                                    return Ok(());
+                let mut append = &mut false;
+                skip = compare_record(force, &record_path, |mut record| {
+                    if let Some(source) = record.next() {
+                        if source == "commit" {
+                            for branch_entry in record {
+                                let mut fields = branch_entry.split_whitespace();
+                                if let (Some(rec_branch), Some(rec_commit)) =
+                                    (fields.next(), fields.next())
+                                {
+                                    if rec_branch == branch && rec_commit == commit {
+                                        return Ok(false);
+                                    }
                                 }
                             }
+                            *append = true;
                         }
-                        append = true;
                     }
-                }
-            }
 
-            info!(
-                "building {} at git branch {}; commit {}",
-                name, branch, commit
-            );
-            Some(if append {
-                Record::CommitAppend(branch, commit)
-            } else {
-                Record::Commit(branch, commit)
-            })
+                    info!("building {} at git branch {}; commit {}", name, branch, commit);
+                    Ok(false)
+                })?;
+
+
+                Some(if *append {
+                    Record::CommitAppend(branch, commit)
+                } else {
+                    Record::Commit(branch, commit)
+                })
+            }
+            Some(rule) => {
+                return Err(BuildError::ConditionalRule { rule: rule.to_owned() });
+            }
+            None => None,
         }
-        Some(rule) => {
-            return Err(BuildError::ConditionalRule { rule: rule.to_owned() });
-        }
-        None => None,
+    };
+
+    if skip {
+        info!("{} has already been built -- skipping", name);
+        return Ok(true)
+    }
+
+    let path;
+    let dir = match dsc {
+        Some(dsc) => {
+            path = dir.join(dsc);
+            &path
+        },
+        None => dir
     };
 
     sbuild(config, item, &pwd, suite, component, dir)?;
 
     let result = match record {
+        Some(Record::Dsc(dsc)) => {
+            misc::write(record_path, ["dsc\n", dsc].concat().as_bytes())
+        }
         Some(Record::Changelog(version)) => {
             misc::write(record_path, ["changelog\n", &version].concat().as_bytes())
         }
@@ -473,10 +526,11 @@ fn pre_flight(
             .append(true)
             .open(record_path)
             .and_then(|mut file| file.write_all([&branch, " ", &commit].concat().as_bytes())),
-        None => return Ok(()),
+        None => Ok(()),
     };
 
-    result.map_err(|why| BuildError::RecordUpdate { package: item.name.to_string(), why })
+    result.map_err(|why| BuildError::RecordUpdate { package: item.name.to_string(), why })?;
+    Ok(false)
 }
 
 fn sbuild<P: AsRef<Path>>(
@@ -508,19 +562,19 @@ fn sbuild<P: AsRef<Path>>(
         let pool = pwd.join(&["repo/pool/", suite, "/", component].concat());
         let deb_iter = misc::walk_debs(&pool, false)
             .flat_map(|deb| misc::match_deb(&deb, depends));
-        
+
         let mut temp: Vec<(String, usize, String, String)> = Vec::new();
         for (deb, pos) in deb_iter {
             let (name, version) = debian::get_debian_package_info(&Path::new(&deb))
                 .expect("failed to get debian name & version");
-            
+
             let mut found = false;
             for stored_dep in &mut temp {
                 if stored_dep.2 == name {
                     found = true;
                     if deb_version::compare_versions(&stored_dep.3, &version) == Ordering::Less {
                         stored_dep.0 = deb.clone();
-                        stored_dep.1 = pos.clone();
+                        stored_dep.1 = pos;
                         stored_dep.2 = name.clone();
                         stored_dep.3 = version.clone();
                         continue
