@@ -110,6 +110,14 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
     };
 
     let reset = || -> io::Result<()> {
+        Command::new("git")
+            .arg("-C")
+            .arg(&path_with_name)
+            .args(&["reset", "--hard"])
+            .run()
+    };
+
+    let reset_commit = || -> io::Result<()> {
         if let Some(commit) = commit {
             Command::new("git")
                 .arg("-C")
@@ -136,6 +144,7 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
     };
 
     if path_with_name.exists() {
+        reset()?;
         let branch = checkout()?;
 
         if let Some(commit) = commit {
@@ -151,11 +160,11 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
         }
 
         pull(branch)?;
-        reset()?;
+        reset_commit()?;
     } else {
         clone()?;
         checkout()?;
-        reset()?;
+        reset_commit()?;
     }
 
     Ok(())

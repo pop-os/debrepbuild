@@ -205,6 +205,8 @@ pub enum BuildError {
     Command { cmd: &'static str, why: io::Error },
     #[fail(display = "unsupported conditional build rule: {}", rule)]
     ConditionalRule { rule: String },
+    #[fail(display = "failed to set debian changelog: {}", why)]
+    Debchange { why: io::Error },
     #[fail(display = "failed to create missing debian files for {:?}: {}", path, why)]
     DebFile { path: PathBuf, why: io::Error },
     #[fail(display = "failed to create directory for {:?}: {}", path, why)]
@@ -289,6 +291,11 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
         }
         Some(SourceLocation::Dsc { ref dsc }) => {
             dsc_file = Some(misc::filename_from_url(dsc));
+        }
+        Some(SourceLocation::Git { ref commit, ref branch, .. }) => {
+            debchange_git(suite, &project_directory, branch, commit).map_err(|why| {
+                BuildError::Debchange { why }
+            })?;
         }
         _ => (),
     }
@@ -646,4 +653,38 @@ fn sbuild<P: AsRef<Path>>(
             reason: exit_status
         })
     }
+}
+
+fn debchange_git(suite: &str, project_directory: &Path, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
+    let commit_;
+    let mut commit = match commit {
+        Some(commit) => commit.trim(),
+        None => {
+            commit_ = Command::new("git")
+                .arg("-C")
+                .arg(project_directory)
+                .arg("rev-parse")
+                .arg(match branch {
+                    Some(branch) => branch.as_str(),
+                    None => "master"
+                })
+                .run_with_stdout()?;
+
+            commit_.trim()
+        }
+    };
+
+    if commit.len() > 6 {
+        commit = &commit[..6];
+    }
+
+    Command::new("dch")
+        .args(&[
+            "-D", suite,
+            "-l", &["~", commit].concat(),
+            "-c"
+        ])
+        .arg(&project_directory.join("debian/changelog"))
+        .arg(&format!("automatic build of commit {}", commit))
+        .run()
 }
