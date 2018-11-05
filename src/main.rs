@@ -52,10 +52,11 @@ pub mod url;
 
 use clap::{Arg, App, AppSettings, ArgMatches, SubCommand};
 use cli::Action;
-use config::{Config, ConfigFetch};
+use config::{Config, ConfigFetch, SourceLocation};
 use repo::{Packages, Repo};
 use std::{env, fs, io};
 use std::process::exit;
+use url::UrlTokenizer;
 
 pub const SHARED_ASSETS: &str = "assets/share/";
 pub const PACKAGE_ASSETS: &str = "assets/packages/";
@@ -169,10 +170,26 @@ fn read_configs(matches: &ArgMatches) -> io::Result<()> {
         };
 
         if filename.ends_with(".toml") {
-            let config = config::parse(file.path()).map_err(|why| io::Error::new(
+            let mut config = config::parse(file.path()).map_err(|why| io::Error::new(
                 io::ErrorKind::Other,
                 format!("configuration parsing error: {}", why)
             ))?;
+
+            if let Some(ref mut sources) = config.source {
+                for source in sources {
+                    if let Some(ref version) = source.version {
+                        if let Some(SourceLocation::Dsc { ref mut dsc }) = source.location {
+                            *dsc = UrlTokenizer::finalize(&dsc, &source.name, &version)
+                                .map_err(|text|
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        format!("unsupported variable: {}", text)
+                                    )
+                                )?;
+                        }
+                    }
+                }
+            }
 
             configs.push(config);
         }

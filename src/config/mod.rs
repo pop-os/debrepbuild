@@ -210,5 +210,6 @@ pub fn parse(path: PathBuf) -> Result<Config, ParsingError> {
             }
         }
     }
+
     Ok(config)
 }

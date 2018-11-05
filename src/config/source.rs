@@ -32,6 +32,7 @@ pub enum SourceLocation {
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Source {
     pub name:             String,
+    pub version:          Option<String>,
     pub location:         Option<SourceLocation>,
     pub assets:           Option<Vec<SourceAsset>>,
     pub starting_build:   Option<Vec<String>>,
