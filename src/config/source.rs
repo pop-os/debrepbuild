@@ -12,20 +12,27 @@ pub struct SourceAsset {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum DebianPath {
+    /// Fetches the debian directory from a separate URL.
     URL { url: String, checksum: String },
+    /// Fetches the debian directory from a separate branch.
     Branch { url: String, branch: String }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum SourceLocation {
+    /// Fetch the source from a remote tarball.
     URL { url: String, checksum: String },
-    Git { git: String, branch: Option<String> },
+    /// Fetch the source by the git repository where it can be reached.
+    Git { git: String, branch: Option<String>, commit: Option<String> },
+    /// Fetch the source by an existing remote debian `.dsc` file.
+    Dsc { dsc: String }
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Source {
     pub name:             String,
+    pub version:          Option<String>,
     pub location:         Option<SourceLocation>,
     pub assets:           Option<Vec<SourceAsset>>,
     pub starting_build:   Option<Vec<String>>,

@@ -113,6 +113,8 @@ pub enum DownloadError {
     Open { file: PathBuf, why: io::Error },
     #[fail(display = "checksum for {} is invalid -- expected {}, but received {}", name, expected, received)]
     ChecksumInvalid { name: String, expected: String, received: String },
+    #[fail(display = "failed to fetch remote files via dget for {}: {}", url, why)]
+    DGet { url: String, why: io::Error },
     #[fail(display = "git exited with an error: {}", why)]
     GitFailed { why: io::Error },
     #[fail(display = "failed to request data for {}: {}", name, why)]

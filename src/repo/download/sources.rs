@@ -6,7 +6,7 @@ use rayon::ThreadPoolBuilder;
 use reqwest;
 use sha2::Sha256;
 use std::fs::{self, File};
-use std::io;
+use std::{env, io};
 use std::path::PathBuf;
 use super::DownloadError;
 
@@ -23,15 +23,17 @@ pub fn parallel(items: &[Source], suite: &str) -> Vec<Result<(), DownloadError>>
 
 pub fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     match item.location {
-        Some(SourceLocation::Git { ref git, ref branch }) => {
-            match *branch {
-                Some(ref _branch) => unimplemented!(),
-                None => download_git(git, suite).map_err(|why| DownloadError::GitFailed { why })
-            }
+        Some(SourceLocation::Git { ref git, ref branch, ref commit }) => {
+            download_git(&item.name, git, suite, branch, commit).map_err(|why| DownloadError::GitFailed { why })
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
             download_(item, url, checksum)
         },
+        Some(SourceLocation::Dsc { ref dsc }) => {
+            download_dsc(item, dsc, suite).map_err(|why| {
+                DownloadError::DGet { url: dsc.to_owned(), why }
+            })
+        }
         None => Ok(())
     }
 }
@@ -85,25 +87,106 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
 }
 
 /// Downloads the source repository via git, then attempts to build it.
-fn download_git(url: &str, suite: &str) -> io::Result<()> {
-    let name: String = {
-        url.split_at(url.rfind('/').unwrap() + 1)
-            .1
-            .replace(".git", "")
+///
+/// - If the build directory does not exist, it will be cloned.
+/// - Otherwise, the sources will be pulled from the build directory.
+fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
+    let path = env::current_dir()
+        .expect("failed to get current directory")
+        .join(["build/", suite].concat());
+
+    let path_with_name = path.join(name);
+
+    let clone = || -> io::Result<()> {
+        Command::new("git").arg("-C").arg(&path).args(&["clone", &url, name]).run()
     };
 
-    let path = PathBuf::from(["build/", suite, "/", &name].concat());
-
-    if path.exists() {
-        info!("pulling {}", name);
+    let pull = |branch: &str| -> io::Result<()> {
         Command::new("git")
             .arg("-C")
-            .arg(&path)
-            .args(&["pull", "origin", "master"])
+            .arg(&path_with_name)
+            .args(&["pull", "origin", branch])
             .run()
+    };
+
+    let reset = || -> io::Result<()> {
+        Command::new("git")
+            .arg("-C")
+            .arg(&path_with_name)
+            .args(&["reset", "--hard"])
+            .run()
+    };
+
+    let reset_commit = || -> io::Result<()> {
+        if let Some(commit) = commit {
+            Command::new("git")
+                .arg("-C")
+                .arg(&path_with_name)
+                .args(&["reset", "--hard", &commit])
+                .run()?;
+        }
+
+        Ok(())
+    };
+
+    let checkout = || -> io::Result<&str> {
+        match branch {
+            Some(branch) => {
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&path_with_name)
+                    .args(&["checkout", &branch])
+                    .run()?;
+                Ok(branch.as_str())
+            }
+            None => Ok("master")
+        }
+    };
+
+    if path_with_name.exists() {
+        reset()?;
+        let branch = checkout()?;
+
+        if let Some(commit) = commit {
+            let current_revision = Command::new("git")
+                .arg("-C")
+                .arg(&path_with_name)
+                .args(&["rev-parse", branch])
+                .run_with_stdout()?;
+
+            if current_revision.starts_with(commit.as_str()) {
+                return Ok(());
+            }
+        }
+
+        pull(branch)?;
+        reset_commit()?;
     } else {
-        info!("cloning {}", name);
-        let path = ["build/", suite].concat();
-        Command::new("git").args(&["-C", &path, "clone", &url]).run()
+        clone()?;
+        checkout()?;
+        reset_commit()?;
     }
+
+    Ok(())
+}
+
+/// Downloads a debian package's sources from the given remote `dsc` URL.
+///
+/// - The files will only be downloaded, not extracted.
+/// - The files will only be downloaded if they do not already exist.
+fn download_dsc(item: &Source, dsc: &str, suite: &str) -> io::Result<()> {
+    let path = PathBuf::from(["build/", suite, "/", &item.name].concat());
+    let mut result = Ok(());
+    if ! path.join(::misc::filename_from_url(dsc)).exists() {
+        fs::create_dir_all(&path)?;
+        let cwd = env::current_dir()?;
+        env::set_current_dir(&path)?;
+
+        result = Command::new("dget").args(&["-uxqd", dsc]).run();
+        if let Err(why) = env::set_current_dir(cwd) {
+            panic!("failed to set directory to original location: {}", why);
+        }
+    }
+
+    result
 }
