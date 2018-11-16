@@ -270,6 +270,7 @@ fn fetch_assets(
 pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
+
     let mut dsc_file = None;
 
     match item.location {
@@ -300,6 +301,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
         _ => (),
     }
 
+    // A list of hard-linked artifacts that will be removed at the end of the build.
     let mut linked: Vec<LinkedArtifact> = Vec::new();
 
     if dsc_file.is_none() {
@@ -311,11 +313,26 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
         }
 
         if let Some(ref assets) = item.assets {
+            if ! project_directory.exists() {
+                fs::create_dir_all(&project_directory);
+            }
+
             for asset in assets {
                 if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
                     for file in globs.flat_map(|x| x.ok()) {
-                        let dst = project_directory.join(&asset.dst);
-                        linked.push(link_artifact(&file, &dst)?);
+                        // If the asset source is a directory, the filename of that directory
+                        // will be appended to the destionation path.
+                        let tmp: PathBuf;
+                        let dst = if file.is_dir() {
+                            tmp = asset.dst.join(file.file_name().unwrap());
+                            &tmp
+                        } else {
+                            &asset.dst
+                        };
+
+                        // Then the destination will point to the build directory for this package.
+                        let dst = project_directory.join(&dst);
+                        fetch_assets(&mut linked, &file, &dst)?;
                     }
                 }
             }
