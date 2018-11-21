@@ -53,6 +53,16 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
     Ok(())
 }
 
+pub fn build_directories(suite: &str) -> io::Result<()> {
+    let path = PathBuf::from(["build/", suite].concat());
+    if path.exists() {
+        debug!("removing {}", path.display());
+        fs::remove_dir_all(&path)?;
+    }
+
+    fs::create_dir_all(&path)
+}
+
 pub fn remove(packages: &[&str], suite: &str, component: &str) -> io::Result<()> {
     let path = PathBuf::from(["repo/pool/", suite, "/", component].concat());
     for entry in WalkDir::new(path).min_depth(3).max_depth(3).into_iter().filter_map(|x| x.ok()) {
