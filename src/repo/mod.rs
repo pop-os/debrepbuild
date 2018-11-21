@@ -28,6 +28,11 @@ pub struct Repo<'a> {
 
 impl<'a> Repo<'a> {
     pub fn prepare(config: Config, packages: Packages<'a>) -> Repo<'a> {
+        if let Err(why) = prepare::build_directories(&config.archive) {
+            error!("failed to clean build directories: {}", why);
+            exit(1);
+        }
+
         if let Err(why) = prepare::create_missing_directories(&config.archive) {
             error!("unable to create directories in current directory: {}", why);
             exit(1);
@@ -41,6 +46,7 @@ impl<'a> Repo<'a> {
             error!("failed to clean up file: {}", why);
             exit(1);
         }
+
         self
     }
 
