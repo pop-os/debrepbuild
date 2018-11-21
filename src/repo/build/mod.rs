@@ -251,13 +251,21 @@ fn fetch_assets(
         if path.is_dir() {
             let relative = path.strip_prefix(src).unwrap();
             let new_path = dst.join(relative);
-            if !new_path.exists() {
-                fs::create_dir(&new_path)
+            if ! new_path.exists() {
+                fs::create_dir_all(&new_path)
                     .map_err(|why| BuildError::Directory { path: new_path, why })?;
             }
         } else {
             let relative = path.strip_prefix(src).unwrap();
-            let dst = dst.join(relative);
+
+            let dst_: PathBuf;
+            let dst = if relative.as_os_str().is_empty() {
+                dst
+            } else {
+                dst_ = dst.join(relative);
+                &dst_
+            };
+
             let src = path.canonicalize().unwrap();
             linked.push(link_artifact(&src, &dst)?);
         }
@@ -270,6 +278,7 @@ fn fetch_assets(
 pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
     info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
+
     let mut dsc_file = None;
 
     match item.location {
@@ -300,27 +309,10 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
         _ => (),
     }
 
+    // A list of hard-linked artifacts that will be removed at the end of the build.
     let mut linked: Vec<LinkedArtifact> = Vec::new();
 
     if dsc_file.is_none() {
-        match pwd.join(&["assets/packages/", &item.name].concat()) {
-            ref local_assets if local_assets.exists() => {
-                fetch_assets(&mut linked, local_assets, &project_directory)?;
-            },
-            _ => ()
-        }
-
-        if let Some(ref assets) = item.assets {
-            for asset in assets {
-                if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
-                    for file in globs.flat_map(|x| x.ok()) {
-                        let dst = project_directory.join(&asset.dst);
-                        linked.push(link_artifact(&file, &dst)?);
-                    }
-                }
-            }
-        }
-
         match item.debian {
             Some(DebianPath::URL { ref url, ref checksum }) => {
                 unimplemented!()
@@ -336,7 +328,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
             None => {
                 let debian_path = pwd.join(&["debian/", suite, "/", &item.name, "/"].concat());
                 if debian_path.exists() {
-                    let project_debian_path = project_directory.join("debian");
+                    let project_debian_path = project_directory.join("debian/");
                     rsync(&debian_path, &project_debian_path)
                         .map_err(|why| BuildError::Rsync {
                             src: debian_path,
@@ -349,6 +341,41 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
                             path: project_debian_path,
                             why
                         })?;
+                }
+            }
+        }
+
+        match pwd.join(&["assets/packages/", &item.name].concat()) {
+            ref local_assets if local_assets.exists() => {
+                fetch_assets(&mut linked, local_assets, &project_directory)?;
+            },
+            _ => ()
+        }
+
+        if let Some(ref assets) = item.assets {
+            for asset in assets {
+                if let Ok(globs) = glob(&[SHARED_ASSETS, &asset.src].concat()) {
+                    for file in globs.flat_map(|x| x.ok()) {
+                        // If the asset source is a directory, the filename of that directory
+                        // will be appended to the destionation path.
+                        let tmp: PathBuf;
+                        let dst = if file.is_dir() {
+                            tmp = asset.dst.join(file.file_name().unwrap());
+                            &tmp
+                        } else {
+                            &asset.dst
+                        };
+
+                        // Then the destination will point to the build directory for this package.
+                        let dst = project_directory.join(&dst);
+                        if let Some(parent) = dst.parent() {
+                            if ! parent.exists() {
+                                fs::create_dir_all(&parent);
+                            }
+                        }
+
+                        fetch_assets(&mut linked, &file, &dst)?;
+                    }
                 }
             }
         }

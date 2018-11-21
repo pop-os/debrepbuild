@@ -115,7 +115,7 @@ pub fn unlink(link: &Path) -> io::Result<()> {
 }
 
 pub fn get_arch_from_stem(stem: &str) -> &str {
-    if let Some(arch) = ["amd64", "i386"].into_iter().find(|&x| stem.ends_with(x)) {
+    if let Some(arch) = ["amd64", "i386"].iter().find(|&x| stem.ends_with(x)) {
         return arch;
     }
 
