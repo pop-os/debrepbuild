@@ -55,6 +55,7 @@ use cli::Action;
 use config::{Config, ConfigFetch, SourceLocation};
 use repo::{Packages, Repo};
 use std::{env, fs, io};
+use std::path::PathBuf;
 use std::process::exit;
 use url::UrlTokenizer;
 
@@ -96,6 +97,11 @@ fn main() {
         .global_setting(AppSettings::ColoredHelp)
         .global_setting(AppSettings::UnifiedHelpMessage)
         .setting(AppSettings::SubcommandRequiredElseHelp)
+        .arg(Arg::with_name("suites")
+            .help("define which suite(s) to operate on [default is all]")
+            .long("suites")
+            .global(true)
+            .value_delimiter(","))
         .subcommand(SubCommand::with_name("build")
             .about("Builds a new repo, or updates an existing one")
             .alias("b")
@@ -157,42 +163,58 @@ fn read_configs(matches: &ArgMatches) -> io::Result<()> {
     let base_directory = env::current_dir()?;
     let mut configs = Vec::new();
 
-    for file in fs::read_dir("suites")? {
-        let file = match file {
-            Ok(file) => file,
-            Err(_) => continue
-        };
+    let suites: Vec<PathBuf> = match matches.values_of("suites") {
+        Some(suites) => {
+            suites
+                .map(|x| PathBuf::from(["suites/", &x, ".toml"].concat()))
+                .collect()
+        }
+        None => {
+            let mut suites = Vec::new();
+            for file in fs::read_dir("suites")? {
+                let file = match file {
+                    Ok(file) => file,
+                    Err(_) => continue
+                };
 
-        let filename = file.file_name();
-        let filename = match filename.as_os_str().to_str() {
-            Some(filename) => filename,
-            None => continue
-        };
+                let filename = file.file_name();
+                let filename = match filename.as_os_str().to_str() {
+                    Some(filename) => filename,
+                    None => continue
+                };
 
-        if filename.ends_with(".toml") {
-            let mut config = config::parse(file.path()).map_err(|why| io::Error::new(
-                io::ErrorKind::Other,
-                format!("configuration parsing error: {}", why)
-            ))?;
-
-            if let Some(ref mut sources) = config.source {
-                for source in sources {
-                    if let Some(ref version) = source.version {
-                        if let Some(SourceLocation::Dsc { ref mut dsc }) = source.location {
-                            *dsc = UrlTokenizer::finalize(&dsc, &source.name, &version)
-                                .map_err(|text|
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidData,
-                                        format!("unsupported variable: {}", text)
-                                    )
-                                )?;
-                        }
-                    }
+                if filename.ends_with(".toml") {
+                    suites.push(file.path());
                 }
             }
 
-            configs.push(config);
+            suites
         }
+    };
+
+    for suite in suites {
+        let mut config = config::parse(suite).map_err(|why| io::Error::new(
+            io::ErrorKind::Other,
+            format!("configuration parsing error: {}", why)
+        ))?;
+
+        if let Some(ref mut sources) = config.source {
+            for source in sources {
+                if let Some(ref version) = source.version {
+                    if let Some(SourceLocation::Dsc { ref mut dsc }) = source.location {
+                        *dsc = UrlTokenizer::finalize(&dsc, &source.name, &version)
+                            .map_err(|text|
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    format!("unsupported variable: {}", text)
+                                )
+                            )?;
+                    }
+                }
+            }
+        }
+
+        configs.push(config);
     }
 
     for config in configs {
