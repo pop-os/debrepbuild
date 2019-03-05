@@ -302,7 +302,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
             dsc_file = Some(misc::filename_from_url(dsc));
         }
         Some(SourceLocation::Git { ref commit, ref branch, .. }) => {
-            debchange_git(suite, &project_directory, branch, commit).map_err(|why| {
+            debchange_git(suite, &config.version, &project_directory, branch, commit).map_err(|why| {
                 BuildError::Debchange { why }
             })?;
         }
@@ -682,7 +682,7 @@ fn sbuild<P: AsRef<Path>>(
     }
 }
 
-fn debchange_git(suite: &str, project_directory: &Path, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
+fn debchange_git(suite: &str, version: &str, project_directory: &Path, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
     let commit_;
     let mut commit = match commit {
         Some(commit) => commit.trim(),
@@ -701,6 +701,12 @@ fn debchange_git(suite: &str, project_directory: &Path, branch: &Option<String>,
         }
     };
 
+    let timestamp = Command::new("git")
+        .arg("-C")
+        .arg(project_directory)
+        .args(&["show", "-s", "--format=%ct", commit])
+        .run_with_stdout()?;
+
     if commit.len() > 6 {
         commit = &commit[..6];
     }
@@ -708,7 +714,7 @@ fn debchange_git(suite: &str, project_directory: &Path, branch: &Option<String>,
     Command::new("dch")
         .args(&[
             "-D", suite,
-            "-l", &["~", commit].concat(),
+            "-l", &["~", timestamp.trim(), "~", version, "~", commit].concat(),
             "-c"
         ])
         .arg(&project_directory.join("debian/changelog"))

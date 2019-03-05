@@ -196,13 +196,13 @@ pub(crate) fn dists(
             .into_par_iter()
             .map(|(arch, path)| {
                 // Collect a list of packages to process for this architecture.
+                // This list will have older entries filtered.
                 let mut archives: HashMap<String, (String, PathBuf)> = HashMap::new();
 
                 // An iterator that returns debian archives found in the path.
                 let deb_iter = misc::walk_debs(&path, true)
                     .filter(|e| !e.file_type().is_dir())
-                    .map(|e| e.path().to_path_buf())
-                    .collect::<Vec<PathBuf>>();
+                    .map(|e| e.path().to_path_buf());
 
                 for package in deb_iter {
                     if let Some((name, version)) = get_debian_package_info(&package) {
@@ -306,7 +306,6 @@ pub(crate) fn dists(
     for result in entries {
         let (package, contents, arch, component) = result?;
 
-        // NOTE: See ref #1 at the bottom
         match entries_map.entry(arch) {
             Entry::Occupied(mut entry) => {
                 let entry = entry.get_mut();
@@ -335,19 +334,3 @@ pub(crate) fn dists(
     // Re-enable duplicates checking.
     dist_files.compress_and_release(config, origin, None)
 }
-
-// NOTE: #1
-// Requires 1.26.0
-// entry_map.entry(component)
-//     .and_modify(|ref mut e| {
-//         e.0.entry(arch)
-//             .and_modify(|e| e.push(package))
-//             .or_insert_with(|| vec![package]);
-//         e.1.push(contents);
-//     })
-//     .or_insert_with(|| {
-//         let mut arch_map = HashMap::new();
-//         arch_map.insert(arch, vec![package]);
-//
-//         (arch_map, vec![contents])
-//     });
