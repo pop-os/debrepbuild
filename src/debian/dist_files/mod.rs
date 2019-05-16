@@ -69,7 +69,15 @@ impl<'a> DistFiles<'a> {
                 || {
                     let arch_dir = match arch {
                         "amd64" => "binary-amd64",
+                        "arm64" => "binary-arm64",
+                        "armel" => "binary-armel",
+                        "armhf" => "binary-armhf",
                         "i386" => "binary-i386",
+                        "mips" => "binary-mips",
+                        "mipsel" => "binary-mipsel",
+                        "mips64el" => "binary-mips64el",
+                        "ppc64el" => "binary-ppc64el",
+                        "s390x" => "binary-s390x",
                         "all" => "binary-all",
                         arch => panic!("unsupported architecture: {}", arch),
                     };

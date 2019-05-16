@@ -11,6 +11,10 @@ use walkdir::{DirEntry, WalkDir};
 pub const INCLUDE_DDEB: u8 = 1;
 pub const INCLUDE_SRCS: u8 = 2;
 
+pub static ARCHITECTURES: [&str; 10] = [
+    "amd64", "i386", "arm64", "armel", "armhf", "mips", "mipsel", "mips64el", "ppc64el", "s390x",
+];
+
 pub fn filename_from_url(url: &str) -> &str {
     &url[url.rfind('/').map_or(0, |x| x + 1)..]
 }
@@ -115,7 +119,7 @@ pub fn unlink(link: &Path) -> io::Result<()> {
 }
 
 pub fn get_arch_from_stem(stem: &str) -> &str {
-    if let Some(arch) = ["amd64", "i386"].iter().find(|&x| stem.ends_with(x)) {
+    if let Some(arch) = ARCHITECTURES.iter().find(|&x| stem.ends_with(x)) {
         return arch;
     }
 
