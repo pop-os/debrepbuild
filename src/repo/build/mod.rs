@@ -579,7 +579,7 @@ fn sbuild<P: AsRef<Path>>(
     path: P,
     arch: &str,
 ) -> Result<(), BuildError> {
-    let log_path = pwd.join(["logs/", suite, "/", &item.name].concat());
+    let log_path = pwd.join(["logs/", suite, "/", &format!("{}-{}", item.name, arch)].concat());
     let mut command = Exec::cmd("sbuild")
         .args(&[
             "-v", "--log-external-command-output", "--log-external-command-error",
