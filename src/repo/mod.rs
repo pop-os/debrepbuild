@@ -181,7 +181,20 @@ fn collect_components(pool: &Path, base: &str) -> io::Result<Vec<String>> {
             if component.path().is_dir() {
                 let component = component.file_name();
                 let component = component.to_str().unwrap();
-                for arch in &["binary-amd64", "binary-i386", "binary-all", "source"] {
+                for arch in &[
+                    "binary-amd64",
+                    "binary-arm64",
+                    "binary-armel",
+                    "binary-armhf",
+                    "binary-i386",
+                    "binary-mips",
+                    "binary-mipsel",
+                    "binary-mips64el",
+                    "binary-ppc64el",
+                    "binary-s390x",
+                    "binary-all",
+                    "source",
+                ] {
                     let _ = fs::create_dir_all([&base, "/", component, "/", arch].concat());
                 }
 

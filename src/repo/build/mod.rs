@@ -542,7 +542,10 @@ fn pre_flight(
         None => dir
     };
 
-    sbuild(config, item, &pwd, suite, component, dir)?;
+    config
+        .architectures
+        .iter()
+        .try_for_each(|arch| sbuild(config, item, &pwd, suite, component, dir, arch))?;
 
     let result = match record {
         Some(Record::Dsc(dsc)) => {
@@ -574,11 +577,13 @@ fn sbuild<P: AsRef<Path>>(
     suite: &str,
     component: &str,
     path: P,
+    arch: &str,
 ) -> Result<(), BuildError> {
-    let log_path = pwd.join(["logs/", suite, "/", &item.name].concat());
+    let log_path = pwd.join(["logs/", suite, "/", &format!("{}-{}", item.name, arch)].concat());
     let mut command = Exec::cmd("sbuild")
         .args(&[
             "-v", "--log-external-command-output", "--log-external-command-error",
+            &format!("--host={}", arch),
             // "--dpkg-source-opt=-Zgzip", // Use this when testing
             "-d", suite
         ])

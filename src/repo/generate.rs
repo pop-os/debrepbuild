@@ -167,7 +167,15 @@ fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
                 let path = pool_base.join(&arch);
                 let arch = match arch.to_str().unwrap() {
                     "binary-amd64" => "amd64",
+                    "binary-arm64" => "arm64",
+                    "binary-armel" => "armel",
+                    "binary-armhf" => "armhf",
                     "binary-i386" => "i386",
+                    "binary-mips" => "mips",
+                    "binary-mipsel" => "mipsel",
+                    "binary-mips64el" => "mips64el",
+                    "binary-ppc64el" => "ppc64el",
+                    "binary-s390x" => "s390x",
                     "binary-all" => "all",
                     arch => panic!("unsupported architecture: {}", arch),
                 };

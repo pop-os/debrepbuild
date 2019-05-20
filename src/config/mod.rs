@@ -47,6 +47,8 @@ pub struct Config {
     pub origin: String,
     pub label: String,
     pub email: String,
+    #[serde(default = "default_architectures")]
+    pub architectures: Vec<String>,
     /// Packages which are already in the deb format.
     pub direct: Option<Vec<Direct>>,
     /// Projects which can be built from source.
@@ -92,6 +94,9 @@ impl Config {
     }
 }
 
+fn default_architectures() -> Vec<String> {
+    vec!["amd64".into(), "i368".into()]
+}
 fn default_component() -> String { "main".into() }
 
 /// Methods for fetching and updating values from the in-memory representation of the TOML spec.
