@@ -61,7 +61,7 @@ fn pool<F: Fn(&Path, &Path) -> io::Result<()>>(
             info!("migrating {} to pool", path.display());
             let mut package = &filename[..filename.find('_').unwrap_or(0)];
 
-            let is_source = DEB_SOURCE_EXTENSIONS.into_iter().any(|ext| filename.ends_with(&ext[1..]));
+            let is_source = DEB_SOURCE_EXTENSIONS.iter().any(|ext| filename.ends_with(&ext[1..]));
             let destination = if is_source {
                 PathBuf::from(
                     ["repo/pool/", suite, "/", component, "/source/", &package[0..1], "/", package].concat()

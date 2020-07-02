@@ -87,7 +87,7 @@ pub(crate) fn dists_release(config: &Config, base: &str, components: &[String]) 
         .arg("-o")
         .arg("APT::FTPArchive::Release::Architectures=i386 amd64 all")
         .arg("-o")
-        .arg(["APT::FTPArchive::Release::Components=", components.trim_right()].concat())
+        .arg(["APT::FTPArchive::Release::Components=", components.trim_end()].concat())
         .arg("-o")
         .arg(format!(
             "APT::FTPArchive::Release::Description={} ({} {})",
@@ -221,7 +221,7 @@ pub(crate) fn dists(
                                     entry.insert((version, package));
                                 }
                             }
-                            Entry::Vacant(mut entry) => {
+                            Entry::Vacant(entry) => {
                                 entry.insert((version, package));
                             }
                         }
@@ -321,13 +321,13 @@ pub(crate) fn dists(
                     Entry::Occupied(mut entry) => {
                         (*entry.get_mut()).push(package);
                     },
-                    Entry::Vacant(mut entry) => {
+                    Entry::Vacant(entry) => {
                         entry.insert(vec![package]);
                     }
                 }
                 (*entry).1.push(contents);
             }
-            Entry::Vacant(mut entry) => {
+            Entry::Vacant(entry) => {
                 entry.insert({
                     let mut component_map = HashMap::new();
                     component_map.insert(component, vec![package]);

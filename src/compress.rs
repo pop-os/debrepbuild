@@ -27,18 +27,18 @@ fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) 
     }
 
     let mut destinations = {
-        let mut writers: Vec<Box<SyncWrite>> = Vec::new();
+        let mut writers: Vec<Box<dyn SyncWrite>> = Vec::new();
         if support & UNCOMPRESSED != 0 {
             writers.push(Box::new(File::create(path.join(name))?));
         }
 
         if support & GZ_COMPRESS != 0 {
-            let mut gz_file = File::create(path.join([name, ".gz"].concat()))?;
+            let gz_file = File::create(path.join([name, ".gz"].concat()))?;
             writers.push(Box::new(GzEncoder::new(gz_file, Compression::Best)));
         }
 
         if support & XZ_COMPRESS != 0 {
-            let mut xz_file = File::create(path.join([name, ".xz"].concat()))?;
+            let xz_file = File::create(path.join([name, ".xz"].concat()))?;
             writers.push(Box::new(XzEncoder::new(xz_file, 9)));
         }
 

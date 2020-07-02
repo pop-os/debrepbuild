@@ -74,7 +74,7 @@ impl Command {
                     match stdout.read_line(buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
-                            info!("{}", buffer.trim_right());
+                            info!("{}", buffer.trim_end());
                         }
                     }
                 }
@@ -90,7 +90,7 @@ impl Command {
                     match stderr.read_line(buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
-                            warn!("{}", buffer.trim_right());
+                            warn!("{}", buffer.trim_end());
                         }
                     }
                 }

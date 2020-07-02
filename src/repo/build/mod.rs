@@ -67,7 +67,7 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
     let mut built = 0;
     match config.source.as_ref() {
         Some(items) => {
-            let sources = items.into_iter()
+            let sources = items.iter()
                 .filter(|item| packages.contains(&item.name.as_str()))
                 .collect::<Vec<&Source>>();
 
@@ -314,7 +314,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
 
     if dsc_file.is_none() {
         match item.debian {
-            Some(DebianPath::URL { ref url, ref checksum }) => {
+            Some(DebianPath::URL { url: _, checksum: _ }) => {
                 unimplemented!()
             }
             Some(DebianPath::Branch { ref url, ref branch }) => {
@@ -463,7 +463,7 @@ fn pre_flight(
 
         Some(Record::Dsc(dsc))
     } else {
-        match item.build_on.as_ref().map(|x| x.as_str()) {
+        match item.build_on.as_deref() {
             Some("changelog") => {
                 let version = changelog(&dir.join("debian/changelog"), 1)
                     .map_err(|why| BuildError::Changelog {
@@ -492,7 +492,7 @@ fn pre_flight(
                     why
                 })?;
 
-                let mut append = &mut false;
+                let append = &mut false;
                 skip = compare_record(force, &record_path, |mut record| {
                     if let Some(source) = record.next() {
                         if source == "commit" {
