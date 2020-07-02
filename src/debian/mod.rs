@@ -35,7 +35,7 @@ pub fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String 
         (name, "", ext)
     };
 
-    if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
+    if DEB_SOURCE_EXTENSIONS.iter().any(|x| &x[1..] == ext) {
         [name, dbg_mon, "_", version, ".", ext].concat()
     } else {
         [name, dbg_mon, "_", version, "_", arch, ".", ext].concat()
@@ -44,7 +44,6 @@ pub fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String 
 
 #[cfg(test)]
 mod tests {
-    use super::gen_filename;
 
     #[test]
     fn pool_filename_generation() {

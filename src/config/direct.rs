@@ -50,7 +50,7 @@ impl Direct {
         let mut output = Vec::new();
 
         fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
-            if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
+            if DEB_SOURCE_EXTENSIONS.iter().any(|x| &x[1..] == ext) {
                 [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
             } else {
                 [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()

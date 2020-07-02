@@ -33,7 +33,7 @@ pub fn package_cleanup(config: &Config) -> io::Result<()> {
     if let Some(ref sources) = config.source {
         for source in sources {
             if source.retain != 0 {
-                if let Some("changelog") = source.build_on.as_ref().map(|x| x.as_str()) {
+                if let Some("changelog") = source.build_on.as_deref() {
                     let cpath = PathBuf::from(["debian/", &config.archive, "/", &source.name, "/changelog"].concat());
                     if cpath.exists() {
                         let keep = changelog(&cpath, source.retain)?;

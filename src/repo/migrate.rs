@@ -33,7 +33,7 @@ fn inner_migrate(config: &Config, packages: &[&str], from_component: &str, to_co
     let src_pool = PathBuf::from([&pool, from_component, "/"].concat());
     let dst_pool = PathBuf::from([&pool, to_component, "/"].concat());
 
-    packages.into_iter().map(|package| {
+    packages.iter().map(|package| {
         let files = WalkDir::new(&src_pool)
             .min_depth(1)
             .max_depth(4)
@@ -47,7 +47,7 @@ fn inner_migrate(config: &Config, packages: &[&str], from_component: &str, to_co
             .flat_map(|e| e.ok())
             .filter(|e| e.depth() == 4);
 
-        files.into_iter().map(|file| {
+        files.map(|file| {
             let src = file.path();
             let dst = dst_pool.join(file.path().strip_prefix(&src_pool).unwrap());
 
