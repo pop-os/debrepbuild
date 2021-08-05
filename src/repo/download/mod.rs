@@ -11,11 +11,11 @@ use std::process::exit;
 use std::sync::Arc;
 use reqwest::{self, Client};
 
-pub fn all(config: &Config) {
+pub async fn all(config: &Config) {
     let mut errors = Vec::new();
 
     if let Some(ref ddl_sources) = config.direct {
-        for (id, result) in direct::parallel(ddl_sources, &config.archive, &config.default_component)
+        for (id, result) in direct::download_many(ddl_sources, &config.archive, &config.default_component).await
             .into_iter()
             .enumerate()
         {
@@ -34,7 +34,8 @@ pub fn all(config: &Config) {
     }
 
     if let Some(ref sources) = config.source {
-        for (id, result) in sources::parallel(sources, &config.archive)
+        for (id, result) in sources::download_many(sources, &config.archive)
+            .await
             .into_iter()
             .enumerate()
         {
@@ -52,8 +53,8 @@ pub fn all(config: &Config) {
         }
     }
 
-    if let Some(ref repos) = config.repos {
-        match repos::download(repos, &config.archive, &config.default_component) {
+    if let Some(repos) = config.repos.clone() {
+        match repos::download(repos, config.archive.clone(), config.default_component.clone()).await {
             Ok(()) => {
                 info!("all repos fetched successfully");
             }
@@ -74,13 +75,13 @@ pub fn all(config: &Config) {
 }
 
 // TODO: Optimize with a shrinking queue.
-pub fn packages(sources: &Config, packages: &[&str]) {
+pub async fn packages(sources: &Config, packages: &[&str]) {
     let mut downloaded = 0;
     let client = Arc::new(Client::new());
 
     if let Some(ref source) = sources.direct.as_ref() {
         for source in source.iter().filter(|s| packages.contains(&s.name.as_str())) {
-            if let Err(why) = direct::download(client.clone(), source, &sources.archive, &sources.default_component) {
+            if let Err(why) = direct::download(client.clone(), source, &sources.archive, &sources.default_component).await {
                 error!("failed to download {}: {}", &source.name, why);
                 exit(1);
             }
@@ -94,7 +95,7 @@ pub fn packages(sources: &Config, packages: &[&str]) {
 
     if let Some(ref source) = sources.source.as_ref() {
         for source in source.iter().filter(|s| packages.contains(&s.name.as_str())) {
-            if let Err(why) = sources::download(source, &sources.archive) {
+            if let Err(why) = sources::download(source, &sources.archive).await {
                 error!("failed to download source {}: {}", &source.name, why);
                 exit(1);
             }

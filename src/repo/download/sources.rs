@@ -1,32 +1,30 @@
 use crate::command::Command;
 use crate::config::{Source, SourceLocation};
 use crate::checksum::hasher;
-use rayon::prelude::*;
-use rayon::ThreadPoolBuilder;
 use sha2::Sha256;
 use std::fs::{self, File};
 use std::{env, io};
 use std::path::PathBuf;
 use super::DownloadError;
 
-/// Downloads source code repositories in parallel.
-pub fn parallel(items: &[Source], suite: &str) -> Vec<Result<(), DownloadError>> {
-    // Only up to 8 source clones at a time.
-    let thread_pool = ThreadPoolBuilder::new()
-        .num_threads(8)
-        .build()
-        .expect("failed to build thread pool");
+/// Downloads many source repositories
+pub async fn download_many<'a>(items: &'a [Source], suite: &'a str) -> Vec<Result<(), DownloadError>> {
+    let mut results = Vec::new();
 
-    thread_pool.install(move || items.par_iter().map(|i| download(i, suite)).collect())
+    for item in items {
+        results.push(download(item, suite).await);
+    }
+
+    results
 }
 
-pub fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
+pub async fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     match item.location {
         Some(SourceLocation::Git { ref git, ref branch, ref commit }) => {
             download_git(&item.name, git, suite, branch, commit).map_err(|why| DownloadError::GitFailed { why })
         },
         Some(SourceLocation::URL { ref url, ref checksum }) => {
-            download_(item, url, checksum)
+            download_(item, url, checksum).await
         },
         Some(SourceLocation::Dsc { ref dsc }) => {
             download_dsc(item, dsc, suite).map_err(|why| {
@@ -37,7 +35,7 @@ pub fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     }
 }
 
-fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadError> {
+async fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadError> {
     let filename = &url[url.rfind('/').map_or(0, |x| x + 1)..];
     let destination = PathBuf::from(["assets/cache/", &item.name, "_", &filename].concat());
 
@@ -62,6 +60,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
         })?;
 
         crate::misc::fetch(url, &mut file)
+            .await
             .map_err(|why| DownloadError::Request { name: filename.to_owned(), why })?;
     }
 

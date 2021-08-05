@@ -1,5 +1,3 @@
-use rayon::prelude::*;
-use rayon::ThreadPoolBuilder;
 use reqwest::Client;
 use std::sync::Arc;
 use crate::config::Direct;
@@ -11,7 +9,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str) -> anyhow::Result<DownloadResult> {
+pub async fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str) -> anyhow::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
     let mut downloaded = 0;
@@ -20,26 +18,21 @@ pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str
         let checksum = path.checksum.as_ref().map(|x| x.as_str());
         // If the file is to be repackaged, store it in the assets directory, else the pool.
         let target = destination.assets.as_ref().map_or(&destination.pool, |x| &x.1);
-        downloaded += request::file(client.clone(), item.name.clone(), &destination.url, RequestCompare::Checksum(checksum), target)?;
+        downloaded += request::file(client.clone(), item.name.clone(), &destination.url, RequestCompare::Checksum(checksum), target).await?;
     }
 
     info!("finished downloading {}", &item.name);
     Ok(DownloadResult::Downloaded(downloaded))
 }
 
-/// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<anyhow::Result<DownloadResult>> {
+/// Downloads pre-built Debian packages
+pub async fn download_many(items: &[Direct], suite: &str, component: &str) -> Vec<anyhow::Result<DownloadResult>> {
+    let mut results = Vec::new();
+
     let client = Arc::new(Client::new());
+    for item in items {
+        results.push(download(client.clone(), item, suite, component).await);
+    }
 
-    // Only up to 8 downloads at a time.
-    let thread_pool = ThreadPoolBuilder::new()
-        .num_threads(8)
-        .build()
-        .expect("failed to build thread pool");
-
-    thread_pool.install(|| {
-        items.par_iter()
-            .map(|item| download(client.clone(), item, suite, component))
-            .collect()
-    })
+    results
 }

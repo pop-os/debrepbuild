@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::sync::Arc;
+use std::io::Write;
 
 const ATTEMPTS: u8 = 3;
 
@@ -13,7 +14,7 @@ pub enum RequestCompare<'a> {
     SizeAndModification(u64, Option<i64>)
 }
 
-pub fn file(client: Arc<Client>, _name: String, url: &str, compare: RequestCompare, path: &Path) -> anyhow::Result<u64> {
+pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: RequestCompare<'a>, path: &Path) -> anyhow::Result<u64> {
     let mut tries = 0;
 
     loop {
@@ -60,20 +61,13 @@ pub fn file(client: Arc<Client>, _name: String, url: &str, compare: RequestCompa
 
         info!("downloading package to {}", path.display());
 
-        use std::io::Write;
-        futures_lite::future::block_on(async {
-            let mut response = client.get(url).send().await?;
+        let mut response = client.get(url).send().await?;
 
-            while let Some(chunk) = response.chunk().await? {
-                file.write(&chunk)?;
-            }
+        while let Some(chunk) = response.chunk().await? {
+            file.write(&chunk)?;
+        }
 
-            file.flush()?;
-
-            Ok::<(), anyhow::Error>(())
-        })?;
-
-        crate::misc::fetch(url, &mut file)?;
+        file.flush()?;
 
         info!("finished downloading {}", path.display());
         if let RequestCompare::Checksum(Some(checksum)) = compare {

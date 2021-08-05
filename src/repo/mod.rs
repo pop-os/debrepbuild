@@ -50,11 +50,11 @@ impl<'a> Repo<'a> {
         self
     }
 
-    pub fn download(self) -> Self {
+    pub async fn download(self) -> Repo<'a> {
         match self.packages {
-            Packages::All => download::all(&self.config),
+            Packages::All => download::all(&self.config).await,
             Packages::Select(ref packages, _) => {
-                download::packages(&self.config, packages)
+                download::packages(&self.config, packages).await
             }
         }
 

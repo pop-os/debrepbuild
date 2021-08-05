@@ -156,16 +156,14 @@ pub fn copy<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> io::Result<()> {
     Ok(())
 }
 
-pub fn fetch(url: &str, file: &mut File) -> anyhow::Result<()> {
-    futures_lite::future::block_on(async move {
-        let mut response = reqwest::get(url).await?;
+pub async fn fetch(url: &str, file: &mut File) -> anyhow::Result<()> {
+    let mut response = reqwest::get(url).await?;
 
-        while let Some(chunk) = response.chunk().await? {
-            file.write(&chunk)?;
-        }
+    while let Some(chunk) = response.chunk().await? {
+        file.write(&chunk)?;
+    }
 
-        file.flush()?;
+    file.flush()?;
 
-        Ok(())
-    })
+    Ok(())
 }

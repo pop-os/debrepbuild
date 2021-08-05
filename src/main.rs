@@ -54,7 +54,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
     Ok(())
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
+#[tokio::main]
 async fn main() {
     setup_logger().unwrap();
     let version = format!("{} ({})", crate_version!(), short_sha());
@@ -122,13 +122,13 @@ async fn main() {
                 .required(true))
         ).get_matches();
 
-    if let Err(why) = read_configs(&matches) {
+    if let Err(why) = read_configs(&matches).await {
         eprintln!("failed to apply configs: {}", why);
         exit(1);
     }
 }
 
-fn read_configs(matches: &ArgMatches) -> io::Result<()> {
+async fn read_configs<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
     let base_directory = env::current_dir()?;
     let mut configs = Vec::new();
 
@@ -187,19 +187,20 @@ fn read_configs(matches: &ArgMatches) -> io::Result<()> {
     }
 
     for config in configs {
-        apply_config(config, matches);
+        apply_config(config, matches).await;
         env::set_current_dir(&base_directory)?;
     }
 
     Ok(())
 }
 
-fn apply_config(mut config: Config, matches: &ArgMatches) {
+async fn apply_config<'a>(mut config: Config, matches: &ArgMatches<'a>) {
     info!("Building from config at {}", config.path.display());
     match Action::new(&matches) {
         Action::Build(packages, force) => {
             Repo::prepare(config, Packages::Select(&packages, force))
                 .download()
+                .await
                 .build()
                 .generate();
         },
@@ -224,7 +225,7 @@ fn apply_config(mut config: Config, matches: &ArgMatches) {
             }
         },
         Action::Pool => {
-            Repo::prepare(config, Packages::All).download();
+            Repo::prepare(config, Packages::All).download().await;
         },
         Action::Remove(packages) => {
             Repo::prepare(config, Packages::Select(&packages, false)).remove();
@@ -245,6 +246,7 @@ fn apply_config(mut config: Config, matches: &ArgMatches) {
         Action::UpdateRepository => {
             Repo::prepare(config, Packages::All)
                 .download()
+                .await
                 .build()
                 .generate();
         }
