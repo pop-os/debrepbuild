@@ -529,9 +529,9 @@ checksum = "b390250ca2b6862735ef39a7b37b0266a8d5cd9d1e579260c95b1dc27761d6ad"
 
 [[package]]
 name = "debarchive"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06dd8176b66464d6812466c27e763edc4cd33049466564cd7d37bd8fb9bca759"
+checksum = "5caea1f30b80f0a8fe7a1842e5007d47ad6a48175ad0946c38c0c395093906fe"
 dependencies = [
  "ar",
  "libflate",
