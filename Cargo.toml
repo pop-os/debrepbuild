@@ -44,6 +44,7 @@ sha2 = "0.9"
 subprocess = "0.2"
 tempdir = "0.3"
 tempfile = "3.0"
+tokio = { version = "1", features = ["full"] }
 toml = "0.5"
 utime = "0.3"
 walkdir = "2"

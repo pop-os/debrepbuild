@@ -1,33 +1,3 @@
-extern crate apt_repo_crawler;
-extern crate bus_writer;
-extern crate crossbeam_channel;
-extern crate deb_version;
-extern crate debarchive;
-extern crate deflate;
-extern crate digest;
-extern crate failure;
-extern crate fern;
-extern crate glob;
-extern crate hex_view;
-extern crate itertools;
-extern crate libc;
-extern crate libflate;
-extern crate md5;
-extern crate rayon;
-extern crate regex;
-extern crate reqwest;
-extern crate select;
-extern crate serde;
-extern crate sha1;
-extern crate sha2;
-extern crate subprocess;
-extern crate tempfile;
-extern crate toml;
-extern crate utime;
-extern crate walkdir;
-extern crate xz2;
-extern crate zstd;
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -84,7 +54,8 @@ fn setup_logger() -> Result<(), fern::InitError> {
     Ok(())
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
+async fn main() {
     setup_logger().unwrap();
     let version = format!("{} ({})", crate_version!(), short_sha());
 
