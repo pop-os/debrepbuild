@@ -93,7 +93,7 @@ pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompar
             }
         } else if let RequestCompare::SizeAndModification(_length, Some(mtime)) = compare {
             let (atime, _) = utime::get_file_times(path)?;
-            utime::set_file_times(path, atime, mtime as u64)?;
+            utime::set_file_times(path, atime, mtime)?;
             return Ok(downloaded);
         } else {
             return Ok(downloaded);

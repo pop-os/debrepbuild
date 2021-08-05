@@ -24,7 +24,7 @@ pub fn mv_to_pool<P: AsRef<Path>>(path: P, suite: &str, component: &str, flags: 
 
 fn is_source(src: &Path) -> bool {
     let path = src.to_str().unwrap();
-    path.ends_with(".dsc") || path.ends_with(".tar.gz") || path.ends_with(".tar.xz")
+    path.ends_with(".dsc") || path.ends_with(".tar.gz") || path.ends_with(".tar.xz") || path.ends_with(".tar.zst")
 }
 
 fn is_archive(src: &Path) -> bool {

@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use compress::*;
 
-pub const DEB_SOURCE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.xz", ".dsc"];
+pub const DEB_SOURCE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.xz", ".tar.zst", ".dsc"];
 pub const DEB_DEBUG_EXTENSION: &str = ".ddeb";
 pub const DEB_EXTENSION: &str = ".deb";
 

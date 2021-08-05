@@ -62,7 +62,7 @@ impl<'a> DistFiles<'a> {
 
                     // Similar to the Packages archives, we also need an uncompressed variant of
                     // the compressed archives to satisfy APT's detection capabilities.
-                    compress(&["Contents-", &arch].concat(), path, contents_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+                    compress(&["Contents-", &arch].concat(), path, contents_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS | ZSTD_COMPRESS)
                 },
                 // Generate & compress each Packages archive for each architecture & component in parallel.
                 // Packages archives are processed in a per-architecture, per-component manner.
@@ -105,7 +105,7 @@ impl<'a> DistFiles<'a> {
 
                         // Although we will generate a compressed GZ and XZ archive for our
                         // repository, APT still requires that we also write an uncompressed variant.
-                        compress("Packages", binary_path, packages_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS)
+                        compress("Packages", binary_path, packages_reader, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS | ZSTD_COMPRESS)
                             .map_err(|why| io::Error::new(
                                 io::ErrorKind::Other,
                                 format!("failed to generate content archive at {}: {}", path.display(), why)

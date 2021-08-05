@@ -10,8 +10,8 @@ pub(crate) fn hasher<H: Digest, R: io::Read>(mut reader: R) -> io::Result<String
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 { break }
-        hasher.input(&buffer[..read]);
+        hasher.update(&buffer[..read]);
     }
 
-    Ok(format!("{:x}", HexView::from(hasher.result().as_slice())))
+    Ok(format!("{:x}", HexView::from(hasher.finalize().as_slice())))
 }

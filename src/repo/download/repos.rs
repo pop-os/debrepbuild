@@ -29,7 +29,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                         .crawl();
 
                     for package in crawler {
-                        in_tx.send(package);
+                        let _ = in_tx.send(package);
                     }
                 }
             });
@@ -39,7 +39,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                 // Sends data required by the file requester to the output channel.
                 let send_func = |file: AptEntry| -> bool {
                     if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
-                        out_tx.send((
+                        let _ = out_tx.send((
                             desc.name.to_owned(),
                             file.url.as_str().to_owned(),
                             RequestCompare::SizeAndModification(
@@ -120,7 +120,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
 
 fn get_destination(desc: AptPackage, suite: &str, component: &str) -> PathBuf {
     let dst = match desc.extension {
-        "tar.gz" | "tar.xz" | "dsc" => ["/", component, "/source/"].concat(),
+        "tar.gz" | "tar.xz" | "tar.zst" | "dsc" => ["/", component, "/source/"].concat(),
         _ => ["/", component, "/binary-", desc.arch, "/"].concat()
     };
 

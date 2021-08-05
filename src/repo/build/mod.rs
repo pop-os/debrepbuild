@@ -314,7 +314,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
 
     if dsc_file.is_none() {
         match item.debian {
-            Some(DebianPath::URL { ref url, ref checksum }) => {
+            Some(DebianPath::URL { .. }) => {
                 unimplemented!()
             }
             Some(DebianPath::Branch { ref url, ref branch }) => {
@@ -370,7 +370,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
                         let dst = project_directory.join(&dst);
                         if let Some(parent) = dst.parent() {
                             if ! parent.exists() {
-                                fs::create_dir_all(&parent);
+                                let _ = fs::create_dir_all(&parent);
                             }
                         }
 
@@ -492,7 +492,7 @@ fn pre_flight(
                     why
                 })?;
 
-                let mut append = &mut false;
+                let append = &mut false;
                 skip = compare_record(force, &record_path, |mut record| {
                     if let Some(source) = record.next() {
                         if source == "commit" {

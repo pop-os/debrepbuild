@@ -7,7 +7,7 @@ pub fn extract(src: &Path, dst: &Path) -> io::Result<()>  {
         Some(filename) => {
             if filename.ends_with(".zip") {
                 unzip(src, dst)
-            } else if filename.ends_with(".tar.gz") || filename.ends_with(".tar.xz") {
+            } else if filename.ends_with(".tar.gz") || filename.ends_with(".tar.xz") || filename.ends_with(".tar.zst") {
                 untar(src, dst)
             } else {
                 unimplemented!()

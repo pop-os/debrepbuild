@@ -75,7 +75,7 @@ impl Direct {
                 let ext_pos = {
                     let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
                     match &file[ext_pos..] {
-                        "gz" | "xz" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
+                        "gz" | "xz" | "zst" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
                             ext_pos -= 4;
                         }
                         _ => ()
@@ -91,7 +91,7 @@ impl Direct {
 
                 let filename = gen_filename(name, &self.version, arch, extension);
                 let dst = match extension {
-                    "tar.gz" | "tar.xz" | "dsc" => ["/", component, "/source/"].concat(),
+                    "tar.gz" | "tar.xz" | "tar.zst" | "dsc" => ["/", component, "/source/"].concat(),
                     _ => ["/", component, "/binary-", arch, "/"].concat()
                 };
 

@@ -6,9 +6,10 @@ use std::io;
 use std::path::Path;
 use std::fs::File;
 
-pub const UNCOMPRESSED: u8 = 1;
-pub const GZ_COMPRESS: u8 = 2;
-pub const XZ_COMPRESS: u8 = 4;
+pub const UNCOMPRESSED: u8 = 0b1;
+pub const GZ_COMPRESS: u8 = 0b10;
+pub const XZ_COMPRESS: u8 = 0b100;
+pub const ZSTD_COMPRESS: u8 = 0b1000;
 
 pub trait SyncWrite: Send + Sync + io::Write {}
 impl<T: Send + Sync + io::Write> SyncWrite for T {}
@@ -27,18 +28,18 @@ fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) 
     }
 
     let mut destinations = {
-        let mut writers: Vec<Box<SyncWrite>> = Vec::new();
+        let mut writers: Vec<Box<dyn SyncWrite>> = Vec::new();
         if support & UNCOMPRESSED != 0 {
             writers.push(Box::new(File::create(path.join(name))?));
         }
 
         if support & GZ_COMPRESS != 0 {
-            let mut gz_file = File::create(path.join([name, ".gz"].concat()))?;
+            let gz_file = File::create(path.join([name, ".gz"].concat()))?;
             writers.push(Box::new(GzEncoder::new(gz_file, Compression::Best)));
         }
 
         if support & XZ_COMPRESS != 0 {
-            let mut xz_file = File::create(path.join([name, ".xz"].concat()))?;
+            let xz_file = File::create(path.join([name, ".xz"].concat()))?;
             writers.push(Box::new(XzEncoder::new(xz_file, 9)));
         }
 
@@ -54,5 +55,7 @@ fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) 
         support & XZ_COMPRESS != 0
     );
 
-    BusWriter::new(stream, &mut destinations, |_| {}, || false).write()
+    BusWriter::new(stream, &mut destinations, |_| {}, || false).write()?;
+
+    Ok(())
 }

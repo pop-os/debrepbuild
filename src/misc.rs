@@ -69,7 +69,7 @@ pub fn is_deb(entry: &DirEntry, flags: u8) -> bool {
     })
 }
 
-pub fn walk_debs(path: &Path, ddeb: bool) -> Box<Iterator<Item = DirEntry>> {
+pub fn walk_debs(path: &Path, ddeb: bool) -> Box<dyn Iterator<Item = DirEntry>> {
     Box::new(
         WalkDir::new(path)
             .into_iter()

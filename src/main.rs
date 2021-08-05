@@ -1,7 +1,5 @@
 extern crate apt_repo_crawler;
 extern crate bus_writer;
-#[macro_use]
-extern crate cascade;
 extern crate crossbeam_channel;
 extern crate deb_version;
 extern crate debarchive;
@@ -29,6 +27,7 @@ extern crate toml;
 extern crate utime;
 extern crate walkdir;
 extern crate xz2;
+extern crate zstd;
 
 #[macro_use]
 extern crate clap;
