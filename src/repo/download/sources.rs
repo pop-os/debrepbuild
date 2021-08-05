@@ -1,9 +1,8 @@
-use command::Command;
-use config::{Source, SourceLocation};
-use checksum::hasher;
+use crate::command::Command;
+use crate::config::{Source, SourceLocation};
+use crate::checksum::hasher;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use reqwest;
 use sha2::Sha256;
 use std::fs::{self, File};
 use std::{env, io};
@@ -62,8 +61,7 @@ fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), DownloadErr
             why
         })?;
 
-        reqwest::get(url)
-            .and_then(|mut request| request.copy_to(&mut file))
+        crate::misc::fetch(url, &mut file)
             .map_err(|why| DownloadError::Request { name: filename.to_owned(), why })?;
     }
 
@@ -177,7 +175,7 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
 fn download_dsc(item: &Source, dsc: &str, suite: &str) -> io::Result<()> {
     let path = PathBuf::from(["build/", suite, "/", &item.name].concat());
     let mut result = Ok(());
-    if ! path.join(::misc::filename_from_url(dsc)).exists() {
+    if ! path.join(crate::misc::filename_from_url(dsc)).exists() {
         fs::create_dir_all(&path)?;
         let cwd = env::current_dir()?;
         env::set_current_dir(&path)?;

@@ -1,9 +1,8 @@
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use reqwest::Client;
-use std::io;
 use std::sync::Arc;
-use config::Direct;
+use crate::config::Direct;
 use super::request::{self, RequestCompare};
 
 /// Possible messages that may be returned when a download has succeeded.
@@ -12,7 +11,7 @@ pub enum DownloadResult {
 }
 
 /// Given an item with a URL, download the item if the item does not already exist.
-pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str) -> io::Result<DownloadResult> {
+pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str) -> anyhow::Result<DownloadResult> {
     info!("checking if {} needs to be downloaded", item.name);
 
     let mut downloaded = 0;
@@ -29,7 +28,7 @@ pub fn download(client: Arc<Client>, item: &Direct, suite: &str, component: &str
 }
 
 /// Downloads pre-built Debian packages in parallel
-pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<io::Result<DownloadResult>> {
+pub fn parallel(items: &[Direct], suite: &str, component: &str) -> Vec<anyhow::Result<DownloadResult>> {
     let client = Arc::new(Client::new());
 
     // Only up to 8 downloads at a time.

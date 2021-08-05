@@ -1,12 +1,10 @@
-use checksum::hasher;
-use parallel_getter::ParallelGetter;
+use crate::checksum::hasher;
 use reqwest::Client;
 use sha2::Sha256;
-use std::{fs::{self, File}, io};
+use std::fs::{self, File};
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::sync::Arc;
-use utime;
 
 const ATTEMPTS: u8 = 3;
 
@@ -15,10 +13,9 @@ pub enum RequestCompare<'a> {
     SizeAndModification(u64, Option<i64>)
 }
 
-pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompare, path: &Path) -> io::Result<u64> {
+pub fn file(client: Arc<Client>, _name: String, url: &str, compare: RequestCompare, path: &Path) -> anyhow::Result<u64> {
     let mut tries = 0;
 
-    let name = Arc::new(name);
     loop {
         let mut file = if path.exists() {
             let mut requires_download = true;
@@ -62,31 +59,33 @@ pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompar
         };
 
         info!("downloading package to {}", path.display());
-        let name = name.clone();
-        let downloaded = ParallelGetter::new(url, &mut file)
-            .client(client.clone())
-            .threads(4)
-            .threshold_memory(10 * 1024 * 1024)
-            .threshold_parallel(1024 * 1024)
-            .callback(1000, Box::new(move |p, t| {
-                info!("{}: downloaded {} out of {} MiB", name, p / 1024 / 1024, t / 1024 / 1024)
-            }))
-            .get()? as u64;
+
+        use std::io::Write;
+        futures_lite::future::block_on(async {
+            let mut response = client.get(url).send().await?;
+
+            while let Some(chunk) = response.chunk().await? {
+                file.write(&chunk)?;
+            }
+
+            file.flush()?;
+
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        crate::misc::fetch(url, &mut file)?;
 
         info!("finished downloading {}", path.display());
         if let RequestCompare::Checksum(Some(checksum)) = compare {
             let digest = hasher::<Sha256, File>(File::open(path)?)?;
             if digest == checksum {
-                return Ok(downloaded);
+                return Ok(0);
             } else {
                 error!("checksum does not much for {}, removing.", path.display());
                 fs::remove_file(&path)?;
 
                 if tries == ATTEMPTS {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("checksum does not match for {}", path.display())
-                    ));
+                    return Err(anyhow::anyhow!("checksum does not match for {}", path.display()));
                 }
 
                 tries += 1;
@@ -94,9 +93,9 @@ pub fn file(client: Arc<Client>, name: String, url: &str, compare: RequestCompar
         } else if let RequestCompare::SizeAndModification(_length, Some(mtime)) = compare {
             let (atime, _) = utime::get_file_times(path)?;
             utime::set_file_times(path, atime, mtime)?;
-            return Ok(downloaded);
+            return Ok(0);
         } else {
-            return Ok(downloaded);
+            return Ok(0);
         }
     }
 }

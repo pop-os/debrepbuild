@@ -1,7 +1,7 @@
 use std::{io, fs};
 use std::path::{Path, PathBuf};
-use debian::DEB_SOURCE_EXTENSIONS;
-use misc;
+use crate::debian::DEB_SOURCE_EXTENSIONS;
+use crate::misc;
 
 pub const KEEP_SOURCE: u8 = 1;
 pub const ARCHIVES_ONLY: u8 = 2;

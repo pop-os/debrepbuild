@@ -1,18 +1,17 @@
 use apt_repo_crawler::{filename_from_url, AptCrawler, AptEntry, AptPackage};
-use config::Repo;
+use crate::config::Repo;
 use crossbeam_channel::bounded;
 use deb_version;
-use debian::gen_filename;
+use crate::debian::gen_filename;
 use rayon::{scope, ThreadPoolBuilder};
 use rayon::prelude::*;
 use reqwest::Client;
 use std::cmp::Ordering;
-use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use super::request::{self, RequestCompare};
 
-pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> {
+pub fn download(repos: &[Repo], suite: &str, component: &str) -> anyhow::Result<()> {
     let mut result = Ok(());
     let (in_tx, in_rx) = bounded::<AptEntry>(64);
     let (out_tx, out_rx) = bounded::<(String, String, RequestCompare, PathBuf)>(64);
@@ -110,7 +109,7 @@ pub fn download(repos: &[Repo], suite: &str, component: &str) -> io::Result<()> 
                         request::file(client, name, &url, compare, &dest)?;
                         Ok(())
                     })
-                    .collect::<io::Result<()>>();
+                    .collect::<anyhow::Result<()>>();
             });
         });
     }

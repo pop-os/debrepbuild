@@ -9,7 +9,7 @@ pub use self::info::*;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use compress::*;
+use crate::compress::*;
 
 pub const DEB_SOURCE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.xz", ".tar.zst", ".dsc"];
 pub const DEB_DEBUG_EXTENSION: &str = ".ddeb";
@@ -39,15 +39,5 @@ pub fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String 
         [name, dbg_mon, "_", version, ".", ext].concat()
     } else {
         [name, dbg_mon, "_", version, "_", arch, ".", ext].concat()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::gen_filename;
-
-    #[test]
-    fn pool_filename_generation() {
-
     }
 }

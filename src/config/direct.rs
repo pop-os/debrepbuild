@@ -1,10 +1,10 @@
-use debian::DEB_SOURCE_EXTENSIONS;
+use crate::debian::DEB_SOURCE_EXTENSIONS;
 use std::path::PathBuf;
 use std::borrow::Cow;
 use std::io;
-use url::UrlTokenizer;
+use crate::url::UrlTokenizer;
 use super::{ConfigError, ConfigFetch};
-use misc;
+use crate::misc;
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Update {

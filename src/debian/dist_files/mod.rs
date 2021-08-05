@@ -1,7 +1,7 @@
 mod package;
 
-use config::Config;
-use iter_reader::IteratorReader;
+use crate::config::Config;
+use crate::iter_reader::IteratorReader;
 use itertools::Itertools;
 use rayon;
 use rayon::prelude::*;

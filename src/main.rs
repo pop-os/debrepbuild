@@ -13,7 +13,6 @@ extern crate itertools;
 extern crate libc;
 extern crate libflate;
 extern crate md5;
-extern crate parallel_getter;
 extern crate rayon;
 extern crate regex;
 extern crate reqwest;

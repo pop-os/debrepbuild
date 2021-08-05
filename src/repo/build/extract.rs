@@ -1,6 +1,6 @@
 use std::{fs, io};
 use std::path::Path;
-use command::Command;
+use crate::command::Command;
 
 pub fn extract(src: &Path, dst: &Path) -> io::Result<()>  {
     match src.file_name().and_then(|x| x.to_str()) {

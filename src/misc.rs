@@ -3,7 +3,7 @@ use std::fs::{self, File};
 use std::io::{self, Error, ErrorKind, Read, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
-use debian::DEB_SOURCE_EXTENSIONS;
+use crate::debian::DEB_SOURCE_EXTENSIONS;
 
 use libc;
 use walkdir::{DirEntry, WalkDir};
@@ -154,4 +154,18 @@ pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result
 pub fn copy<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> io::Result<()> {
     io::copy(&mut File::open(src)?, &mut File::create(dst)?)?;
     Ok(())
+}
+
+pub fn fetch(url: &str, file: &mut File) -> anyhow::Result<()> {
+    futures_lite::future::block_on(async move {
+        let mut response = reqwest::get(url).await?;
+
+        while let Some(chunk) = response.chunk().await? {
+            file.write(&chunk)?;
+        }
+
+        file.flush()?;
+
+        Ok(())
+    })
 }

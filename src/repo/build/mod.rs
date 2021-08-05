@@ -3,13 +3,13 @@ mod extract;
 mod metapackages;
 mod rsync;
 
-use command::Command;
-use config::{Config, DebianPath, Direct, Source, SourceLocation};
+use crate::command::Command;
+use crate::config::{Config, DebianPath, Direct, Source, SourceLocation};
 use deb_version;
 use debarchive::Archive as DebArchive;
-use debian;
+use crate::debian;
 use glob::glob;
-use misc;
+use crate::misc;
 use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
 use self::rsync::rsync;
 use std::cmp::Ordering;

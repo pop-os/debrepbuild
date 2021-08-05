@@ -1,4 +1,4 @@
-use command::Command;
+use crate::command::Command;
 use std::{io, path::Path};
 
 // TODO: Don't rely on this

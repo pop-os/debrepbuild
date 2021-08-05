@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::ffi::OsStr;
 
 use toml::{self, de};
-use misc;
+use crate::misc;
 
 mod direct;
 mod repos;

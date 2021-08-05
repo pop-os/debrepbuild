@@ -1,7 +1,7 @@
 use std::{fs, io};
 use std::path::{Path, PathBuf};
-use config::Config;
-use debian::DEB_SOURCE_EXTENSIONS;
+use crate::config::Config;
+use crate::debian::DEB_SOURCE_EXTENSIONS;
 use super::version::changelog;
 use walkdir::{DirEntry, WalkDir};
 

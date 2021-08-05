@@ -1,9 +1,9 @@
-use checksum::hasher;
-use config::Config;
-use debian::{self, *};
+use crate::checksum::hasher;
+use crate::config::Config;
+use crate::debian::{self, *};
 use debarchive::Archive as DebArchive;
 use md5::Md5;
-use misc;
+use crate::misc;
 use rayon::{self, prelude::*};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
@@ -12,7 +12,7 @@ use std::collections::hash_map::{HashMap, Entry};
 use std::{env, fs::{self, File}, io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}};
 use deb_version::compare_versions;
 
-use compress::*;
+use crate::compress::*;
 
 pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -> io::Result<()> {
     let pool_path = PathBuf::from(pool_base).join("source");

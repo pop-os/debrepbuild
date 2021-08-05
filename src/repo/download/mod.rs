@@ -3,7 +3,7 @@ mod repos;
 mod request;
 mod sources;
 
-use config::Config;
+use crate::config::Config;
 use self::direct::DownloadResult;
 use std::io;
 use std::path::PathBuf;
@@ -118,5 +118,5 @@ pub enum DownloadError {
     #[fail(display = "git exited with an error: {}", why)]
     GitFailed { why: io::Error },
     #[fail(display = "failed to request data for {}: {}", name, why)]
-    Request { name: String, why: reqwest::Error }
+    Request { name: String, why: anyhow::Error }
 }

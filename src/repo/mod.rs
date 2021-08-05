@@ -8,8 +8,8 @@ mod version;
 
 pub use self::migrate::migrate;
 
-use config::Config;
-use misc::remove_empty_directories_from;
+use crate::config::Config;
+use crate::misc::remove_empty_directories_from;
 use rayon;
 use rayon::prelude::*;
 use std::{env, fs, io};

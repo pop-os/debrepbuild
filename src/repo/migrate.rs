@@ -1,5 +1,5 @@
-use config::Config;
-use misc::{is_deb, INCLUDE_DDEB, INCLUDE_SRCS};
+use crate::config::Config;
+use crate::misc::{is_deb, INCLUDE_DDEB, INCLUDE_SRCS};
 use std::io::{self, Error};
 use std::fs;
 use std::path::{Path, PathBuf};

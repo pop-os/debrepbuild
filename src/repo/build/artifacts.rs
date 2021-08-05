@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::{fs, io};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use misc::unlink;
+use crate::misc::unlink;
 
 pub struct LinkedArtifact(PathBuf);
 
