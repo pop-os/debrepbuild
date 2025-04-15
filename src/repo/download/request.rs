@@ -75,7 +75,7 @@ pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: Re
             if digest == checksum {
                 return Ok(0);
             } else {
-                error!("checksum does not much for {}, removing.", path.display());
+                error!("checksum does not match for {}, removing.", path.display());
                 fs::remove_file(&path)?;
 
                 if tries == ATTEMPTS {
