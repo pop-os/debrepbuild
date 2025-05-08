@@ -1,10 +1,10 @@
 use bus_writer::BusWriter;
 use deflate::Compression;
 use deflate::write::GzEncoder;
-use xz2::write::XzEncoder;
+use std::fs::File;
 use std::io;
 use std::path::Path;
-use std::fs::File;
+use xz2::write::XzEncoder;
 
 pub const UNCOMPRESSED: u8 = 0b1;
 pub const GZ_COMPRESS: u8 = 0b10;
@@ -15,11 +15,17 @@ pub trait SyncWrite: Send + Sync + io::Write {}
 impl<T: Send + Sync + io::Write> SyncWrite for T {}
 
 pub fn compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) -> io::Result<()> {
-    inner_compress(name, path, stream, support)
-        .map_err(|why| io::Error::new(
+    inner_compress(name, path, stream, support).map_err(|why| {
+        io::Error::new(
             io::ErrorKind::Other,
-            format!("failed to compress output to {} in {}: {}", name, path.display(), why)
-        ))
+            format!(
+                "failed to compress output to {} in {}: {}",
+                name,
+                path.display(),
+                why
+            ),
+        )
+    })
 }
 
 fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) -> io::Result<()> {
@@ -46,7 +52,7 @@ fn inner_compress<R: io::Read>(name: &str, path: &Path, stream: R, support: u8) 
         writers
     };
 
-    info!(
+    log::info!(
         "compressing {} to {}: uncompressed: {}, gzip: {}, xz: {}",
         name,
         path.display(),

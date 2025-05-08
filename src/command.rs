@@ -1,6 +1,6 @@
-use std::process::{self, Stdio};
-use std::io::{self, BufRead, BufReader, Error, ErrorKind};
 use std::ffi::OsStr;
+use std::io::{self, BufRead, BufReader, Error, ErrorKind};
+use std::process::{self, Stdio};
 use std::thread;
 
 pub struct Command(process::Command);
@@ -28,42 +28,56 @@ impl Command {
         self.0.env_clear();
     }
 
-    pub fn stdin(&mut self, stdio: Stdio) { self.0.stdin(stdio); }
-    pub fn stderr(&mut self, stdio: Stdio) { self.0.stderr(stdio); }
-    pub fn stdout(&mut self, stdio: Stdio) { self.0.stdout(stdio); }
+    pub fn stdin(&mut self, stdio: Stdio) {
+        self.0.stdin(stdio);
+    }
+    pub fn stderr(&mut self, stdio: Stdio) {
+        self.0.stderr(stdio);
+    }
+    pub fn stdout(&mut self, stdio: Stdio) {
+        self.0.stdout(stdio);
+    }
 
     pub fn run_with_stdout(&mut self) -> io::Result<String> {
         let cmd = format!("{:?}", self.0);
-        debug!("running {}", cmd);
+        log::debug!("running {}", cmd);
 
         self.0.stdout(Stdio::piped());
 
-        let child = self.0.spawn().map_err(|why| Error::new(
-            ErrorKind::Other,
-            format!("chroot command failed to spawn: {}", why)
-        ))?;
-
-        child.wait_with_output()
-            .map_err(|why| Error::new(
+        let child = self.0.spawn().map_err(|why| {
+            Error::new(
                 ErrorKind::Other,
-                format!("failed to get output of {}: {}", cmd, why)
-            ))
+                format!("chroot command failed to spawn: {}", why),
+            )
+        })?;
+
+        child
+            .wait_with_output()
+            .map_err(|why| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("failed to get output of {}: {}", cmd, why),
+                )
+            })
             .and_then(|output| {
-                String::from_utf8(output.stdout)
-                    .map_err(|why| Error::new(
+                String::from_utf8(output.stdout).map_err(|why| {
+                    Error::new(
                         ErrorKind::Other,
-                        format!("command output has invalid UTF-8: {}", why)
-                    ))
+                        format!("command output has invalid UTF-8: {}", why),
+                    )
+                })
             })
     }
 
     pub fn run(&mut self) -> io::Result<()> {
-        debug!("running {:?}", self.0);
+        log::debug!("running {:?}", self.0);
 
-        let mut child = self.0.spawn().map_err(|why| Error::new(
-            ErrorKind::Other,
-            format!("chroot command failed to spawn: {}", why)
-        ))?;
+        let mut child = self.0.spawn().map_err(|why| {
+            Error::new(
+                ErrorKind::Other,
+                format!("chroot command failed to spawn: {}", why),
+            )
+        })?;
 
         if let Some(stdout) = child.stdout.take() {
             let mut stdout = BufReader::new(stdout);
@@ -74,7 +88,7 @@ impl Command {
                     match stdout.read_line(buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
-                            info!("{}", buffer.trim_end());
+                            log::info!("{}", buffer.trim_end());
                         }
                     }
                 }
@@ -90,24 +104,26 @@ impl Command {
                     match stderr.read_line(buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
-                            warn!("{}", buffer.trim_end());
+                            log::warn!("{}", buffer.trim_end());
                         }
                     }
                 }
             });
         }
 
-        let status = child.wait().map_err(|why| Error::new(
-            ErrorKind::Other,
-            format!("waiting on child process failed: {}", why)
-        ))?;
+        let status = child.wait().map_err(|why| {
+            Error::new(
+                ErrorKind::Other,
+                format!("waiting on child process failed: {}", why),
+            )
+        })?;
 
         if status.success() {
             Ok(())
         } else {
             Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("command failed with exit status: {}", status)
+                format!("command failed with exit status: {}", status),
             ))
         }
     }

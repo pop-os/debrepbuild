@@ -1,26 +1,32 @@
 use crate::checksum::hasher;
 use crate::config::Config;
 use crate::debian::{self, *};
+use crate::misc;
+use deb_version::compare_versions;
 use debarchive::Archive as DebArchive;
 use md5::Md5;
-use crate::misc;
 use rayon::{self, prelude::*};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use std::cmp::Ordering;
-use std::collections::hash_map::{HashMap, Entry};
-use std::{env, fs::{self, File}, io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}};
-use deb_version::compare_versions;
+use std::collections::hash_map::{Entry, HashMap};
+use std::{
+    env,
+    fs::{self, File},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 use crate::compress::*;
 
 pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -> io::Result<()> {
     let pool_path = PathBuf::from(pool_base).join("source");
-    if ! pool_path.exists() {
+    if !pool_path.exists() {
         return Ok(());
     }
 
-    info!("generating sources index");
+    log::info!("generating sources index");
     let path = PathBuf::from([dist_base, "/", component, "/source/"].concat());
     fs::create_dir_all(&path)?;
 
@@ -33,14 +39,22 @@ pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -
         .and_then(|mut child| {
             {
                 let stdout = child.stdout.as_mut().unwrap();
-                compress("Sources", &path, stdout, UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS | ZSTD_COMPRESS)?;
+                compress(
+                    "Sources",
+                    &path,
+                    stdout,
+                    UNCOMPRESSED | GZ_COMPRESS | XZ_COMPRESS | ZSTD_COMPRESS,
+                )?;
             }
 
             child.wait().and_then(|stat| {
                 if stat.success() {
                     Ok(())
                 } else {
-                    Err(io::Error::new(io::ErrorKind::Other, "apt-ftparchive failed"))
+                    Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "apt-ftparchive failed",
+                    ))
                 }
             })
         })
@@ -49,17 +63,16 @@ pub(crate) fn sources_index(component: &str, dist_base: &str, pool_base: &str) -
 // TODO: this can easily be replaced with Rust.
 /// Generates the dists release file via `apt-ftparchive`.
 pub(crate) fn dists_release(config: &Config, base: &str, components: &[String]) -> io::Result<()> {
-    info!("generating dists release files");
+    log::info!("generating dists release files");
 
     let cwd = env::current_dir()?;
     env::set_current_dir(base)?;
 
-    let components = components.iter()
-        .fold(String::new(), |mut acc, x| {
-            acc.push_str(&x);
-            acc.push(' ');
-            acc
-        });
+    let components = components.iter().fold(String::new(), |mut acc, x| {
+        acc.push_str(&x);
+        acc.push(' ');
+        acc
+    });
 
     let release = Command::new("apt-ftparchive")
         .arg("-o")
@@ -87,7 +100,13 @@ pub(crate) fn dists_release(config: &Config, base: &str, components: &[String]) 
         .arg("-o")
         .arg("APT::FTPArchive::Release::Architectures=i386 amd64 all")
         .arg("-o")
-        .arg(["APT::FTPArchive::Release::Components=", components.trim_end()].concat())
+        .arg(
+            [
+                "APT::FTPArchive::Release::Components=",
+                components.trim_end(),
+            ]
+            .concat(),
+        )
         .arg("-o")
         .arg(format!(
             "APT::FTPArchive::Release::Description={} ({} {})",
@@ -105,7 +124,7 @@ pub(crate) fn dists_release(config: &Config, base: &str, components: &[String]) 
 
 /// Generates the `InRelease` file from the `Release` file via `gpg --clearsign`.
 pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
-    info!("generating InRelease file");
+    log::info!("generating InRelease file");
     let exit_status = Command::new("gpg")
         .args(&[
             "--clearsign",
@@ -133,7 +152,7 @@ pub(crate) fn gpg_in_release(email: &str, release_path: &Path, out_path: &Path) 
 
 /// Generates the `Release.gpg` file from the `Release` file via `gpg -abs`
 pub(crate) fn gpg_release(email: &str, release_path: &Path, out_path: &Path) -> io::Result<()> {
-    info!("generating Release.gpg file");
+    log::info!("generating Release.gpg file");
     let exit_status = Command::new("gpg")
         .args(&[
             "-abs",
@@ -182,10 +201,12 @@ fn binary_suites(pool_base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
 
                 Some((arch.to_owned(), path))
             }
-        }).collect())
+        })
+        .collect())
 }
 
-type ProcessedResults = Vec<io::Result<(PackageEntry, ContentsEntry, debian::Arch, debian::Component)>>;
+type ProcessedResults =
+    Vec<io::Result<(PackageEntry, ContentsEntry, debian::Arch, debian::Component)>>;
 
 pub(crate) fn dists(
     config: &Config,
@@ -193,119 +214,151 @@ pub(crate) fn dists(
     pool_base: &Path,
     components: &[String],
 ) -> io::Result<()> {
-    info!("generating dist archives");
+    log::info!("generating dist archives");
 
     let origin = &config.origin;
 
     // Collect the entries for each architecture of each component.
-    let entries = components.par_iter().map(|component| {
-        // Collect the entries for each architecture of this component
-        binary_suites(&pool_base.join(&component)).unwrap()
-            .into_par_iter()
-            .map(|(arch, path)| {
-                // Collect a list of packages to process for this architecture.
-                // This list will have older entries filtered.
-                let mut archives: HashMap<String, (String, PathBuf)> = HashMap::new();
+    let entries = components
+        .par_iter()
+        .map(|component| {
+            // Collect the entries for each architecture of this component
+            binary_suites(&pool_base.join(&component))
+                .unwrap()
+                .into_par_iter()
+                .map(|(arch, path)| {
+                    // Collect a list of packages to process for this architecture.
+                    // This list will have older entries filtered.
+                    let mut archives: HashMap<String, (String, PathBuf)> = HashMap::new();
 
-                // An iterator that returns debian archives found in the path.
-                let deb_iter = misc::walk_debs(&path, true)
-                    .filter(|e| !e.file_type().is_dir())
-                    .map(|e| e.path().to_path_buf());
+                    // An iterator that returns debian archives found in the path.
+                    let deb_iter = misc::walk_debs(&path, true)
+                        .filter(|e| !e.file_type().is_dir())
+                        .map(|e| e.path().to_path_buf());
 
-                for package in deb_iter {
-                    if let Some((name, version)) = get_debian_package_info(&package) {
-                        match archives.entry(name) {
-                            Entry::Occupied(mut entry) => {
-                                if compare_versions(&entry.get().0, &version) == Ordering::Less {
-                                    eprintln!("replacing {} with {}", entry.get().0, &version);
+                    for package in deb_iter {
+                        if let Some((name, version)) = get_debian_package_info(&package) {
+                            match archives.entry(name) {
+                                Entry::Occupied(mut entry) => {
+                                    if compare_versions(&entry.get().0, &version) == Ordering::Less
+                                    {
+                                        eprintln!("replacing {} with {}", entry.get().0, &version);
+                                        entry.insert((version, package));
+                                    }
+                                }
+                                Entry::Vacant(entry) => {
                                     entry.insert((version, package));
                                 }
                             }
-                            Entry::Vacant(entry) => {
-                                entry.insert((version, package));
-                            }
                         }
                     }
-                }
 
-                // Collect the entries for this architecture of this component
-                archives.into_par_iter()
-                    .map(|(_, (_, debian_entry))| {
-                        info!("processing contents of {:?}", debian_entry);
+                    // Collect the entries for this architecture of this component
+                    archives
+                        .into_par_iter()
+                        .map(|(_, (_, debian_entry))| {
+                            log::info!("processing contents of {:?}", debian_entry);
 
-                        let arch: &str = &arch;
-                        let component: &str = &component;
+                            let arch: &str = &arch;
+                            let component: &str = &component;
 
-                        // Open the Debian archive, and get the IDs & required codecs for the inner control and data archives.
-                        let archive = DebArchive::new(&debian_entry)?;
-                        // Open the control file within the control archive and read each key / value pair into a map.
-                        let control = archive.control_map()?;
+                            // Open the Debian archive, and get the IDs & required codecs for the inner control and data archives.
+                            let archive = DebArchive::new(&debian_entry)?;
+                            // Open the control file within the control archive and read each key / value pair into a map.
+                            let control = archive.control_map()?;
 
-                        // The Contents archive requires that we know the package and section keys for each Debian package beforehand.
-                        let package_name = match (control.get("Package"), control.get("Section")) {
-                            (Some(ref package), Some(ref section)) if component == "main" => [section, "/", package].concat(),
-                            (Some(ref package), Some(ref section)) => [component, "/", section, "/", package].concat(),
-                            _ => {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::Other,
-                                    "did not find package + section from control archive"
-                                ));
-                            }
-                        };
+                            // The Contents archive requires that we know the package and section keys for each Debian package beforehand.
+                            let package_name =
+                                match (control.get("Package"), control.get("Section")) {
+                                    (Some(ref package), Some(ref section))
+                                        if component == "main" =>
+                                    {
+                                        [section, "/", package].concat()
+                                    }
+                                    (Some(ref package), Some(ref section)) => {
+                                        [component, "/", section, "/", package].concat()
+                                    }
+                                    _ => {
+                                        return Err(io::Error::new(
+                                            io::ErrorKind::Other,
+                                            "did not find package + section from control archive",
+                                        ));
+                                    }
+                                };
 
-                        // Now get a listing of all the files for the Contents archive.
-                        let mut files: Vec<PathBuf> = Vec::new();
+                            // Now get a listing of all the files for the Contents archive.
+                            let mut files: Vec<PathBuf> = Vec::new();
 
-                        // Runs each scope in parallel to generate the contents and checksums.
-                        let (content_res, ((sha1_res, sha256_res), (sha512_res, md5_res))) = {
-                            let path = &debian_entry;
-                            // TODO: use bus_writer instead of reading the same file in each thread.
-                            let generate_hashes = || {
-                                rayon::join(
-                                    || rayon::join(
-                                        || File::open(path).and_then(hasher::<Sha1, File>),
-                                        || File::open(path).and_then(hasher::<Sha256, File>),
-                                    ),
-                                    || rayon::join(
-                                        || File::open(path).and_then(hasher::<Sha512, File>),
-                                        || File::open(path).and_then(hasher::<Md5, File>),
+                            // Runs each scope in parallel to generate the contents and checksums.
+                            let (content_res, ((sha1_res, sha256_res), (sha512_res, md5_res))) = {
+                                let path = &debian_entry;
+                                // TODO: use bus_writer instead of reading the same file in each thread.
+                                let generate_hashes = || {
+                                    rayon::join(
+                                        || {
+                                            rayon::join(
+                                                || File::open(path).and_then(hasher::<Sha1, File>),
+                                                || {
+                                                    File::open(path)
+                                                        .and_then(hasher::<Sha256, File>)
+                                                },
+                                            )
+                                        },
+                                        || {
+                                            rayon::join(
+                                                || {
+                                                    File::open(path)
+                                                        .and_then(hasher::<Sha512, File>)
+                                                },
+                                                || File::open(path).and_then(hasher::<Md5, File>),
+                                            )
+                                        },
                                     )
+                                };
+
+                                rayon::join(
+                                    || {
+                                        archive.data(|entry| {
+                                            let path = entry.path()?;
+                                            files.push(path.to_path_buf());
+                                            Ok(())
+                                        })
+                                    },
+                                    generate_hashes,
                                 )
                             };
 
-                            rayon::join(
-                                || archive.data(|entry| {
-                                    let path = entry.path()?;
-                                    files.push(path.to_path_buf());
-                                    Ok(())
-                                }),
-                                generate_hashes
-                            )
-                        };
+                            drop(archive);
+                            content_res?;
+                            let package_entry = PackageEntry {
+                                control,
+                                filename: debian_entry.clone(),
+                                size: File::open(&debian_entry)
+                                    .and_then(|file| file.metadata().map(|m| m.len()))?,
+                                md5sum: md5_res?,
+                                sha1: sha1_res?,
+                                sha256: sha256_res?,
+                                sha512: sha512_res?,
+                            };
 
-                        drop(archive);
-                        content_res?;
-                        let package_entry = PackageEntry {
-                            control,
-                            filename: debian_entry.clone(),
-                            size: File::open(&debian_entry).and_then(|file| file.metadata().map(|m| m.len()))?,
-                            md5sum: md5_res?,
-                            sha1: sha1_res?,
-                            sha256: sha256_res?,
-                            sha512: sha512_res?,
-                        };
+                            let contents_entry = ContentsEntry {
+                                package: package_name,
+                                files,
+                            };
+                            let arch: String = arch.to_owned();
+                            let component: String = component.to_owned();
 
-                        let contents_entry = ContentsEntry { package: package_name, files };
-                        let arch: String = arch.to_owned();
-                        let component: String = component.to_owned();
-
-                        Ok((package_entry, contents_entry, arch, component))
-                    }).collect::<ProcessedResults>()
-        }).collect::<Vec<ProcessedResults>>()
-    }).collect::<Vec<Vec<ProcessedResults>>>();
+                            Ok((package_entry, contents_entry, arch, component))
+                        })
+                        .collect::<ProcessedResults>()
+                })
+                .collect::<Vec<ProcessedResults>>()
+        })
+        .collect::<Vec<Vec<ProcessedResults>>>();
 
     // Flatten the results for each architecture of each component into a single iterator.
-    let entries = entries.into_iter()
+    let entries = entries
+        .into_iter()
         .flat_map(|entries| entries.into_iter().flat_map(|x| x.into_iter()));
 
     // Validate the results of each parallel process, and collect them in a manner so that they
@@ -320,7 +373,7 @@ pub(crate) fn dists(
                 match (*entry).0.entry(component) {
                     Entry::Occupied(mut entry) => {
                         (*entry.get_mut()).push(package);
-                    },
+                    }
                     Entry::Vacant(entry) => {
                         entry.insert(vec![package]);
                     }

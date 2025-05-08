@@ -28,14 +28,16 @@ pub fn changelog(path: &Path, retain: usize) -> io::Result<Vec<String>> {
 }
 
 fn changelog_inner<I: Iterator<Item = String>>(iter: I, retain: usize) -> Vec<String> {
-    let iterator = iter.filter(|x| !x.starts_with(' '))
+    let iterator = iter
+        .filter(|x| !x.starts_with(' '))
         .map(|x| {
             x.split_whitespace()
                 .nth(1)
                 .map(|x| &x[1..x.len() - 1])
                 .unwrap_or("")
                 .to_owned()
-        }).filter(|x| !x.is_empty());
+        })
+        .filter(|x| !x.is_empty());
 
     if retain == 0 {
         iterator.collect()

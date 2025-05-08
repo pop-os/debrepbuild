@@ -1,7 +1,6 @@
-use std::io;
 use digest::Digest;
 use hex_view::HexView;
-
+use std::io;
 
 pub(crate) fn hasher<H: Digest, R: io::Read>(mut reader: R) -> io::Result<String> {
     let mut buffer = [0u8; 8 * 1024];
@@ -9,7 +8,9 @@ pub(crate) fn hasher<H: Digest, R: io::Read>(mut reader: R) -> io::Result<String
 
     loop {
         let read = reader.read(&mut buffer)?;
-        if read == 0 { break }
+        if read == 0 {
+            break;
+        }
         hasher.update(&buffer[..read]);
     }
 

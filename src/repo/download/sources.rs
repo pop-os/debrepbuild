@@ -1,14 +1,17 @@
+use super::DownloadError;
+use crate::checksum::hasher;
 use crate::command::Command;
 use crate::config::{Source, SourceLocation};
-use crate::checksum::hasher;
 use sha2::Sha256;
 use std::fs::{self, File};
-use std::{env, io};
 use std::path::PathBuf;
-use super::DownloadError;
+use std::{env, io};
 
 /// Downloads many source repositories
-pub async fn download_many<'a>(items: &'a [Source], suite: &'a str) -> Vec<Result<(), DownloadError>> {
+pub async fn download_many<'a>(
+    items: &'a [Source],
+    suite: &'a str,
+) -> Vec<Result<(), DownloadError>> {
     let mut results = Vec::new();
 
     for item in items {
@@ -20,18 +23,23 @@ pub async fn download_many<'a>(items: &'a [Source], suite: &'a str) -> Vec<Resul
 
 pub async fn download(item: &Source, suite: &str) -> Result<(), DownloadError> {
     match item.location {
-        Some(SourceLocation::Git { ref git, ref branch, ref commit }) => {
-            download_git(&item.name, git, suite, branch, commit).map_err(|why| DownloadError::GitFailed { why })
-        },
-        Some(SourceLocation::URL { ref url, ref checksum }) => {
-            download_(item, url, checksum).await
-        },
+        Some(SourceLocation::Git {
+            ref git,
+            ref branch,
+            ref commit,
+        }) => download_git(&item.name, git, suite, branch, commit)
+            .map_err(|why| DownloadError::GitFailed { why }),
+        Some(SourceLocation::URL {
+            ref url,
+            ref checksum,
+        }) => download_(item, url, checksum).await,
         Some(SourceLocation::Dsc { ref dsc }) => {
-            download_dsc(item, dsc, suite).map_err(|why| {
-                DownloadError::DGet { url: dsc.to_owned(), why }
+            download_dsc(item, dsc, suite).map_err(|why| DownloadError::DGet {
+                url: dsc.to_owned(),
+                why,
             })
         }
-        None => Ok(())
+        None => Ok(()),
     }
 }
 
@@ -44,7 +52,7 @@ async fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), Downl
             .and_then(hasher::<Sha256, File>)
             .map_err(|why| DownloadError::Open {
                 file: destination.clone(),
-                why
+                why,
             })?;
 
         digest != checksum
@@ -53,22 +61,29 @@ async fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), Downl
     };
 
     if requires_download {
-        warn!("checksum did not match for {}. downloading from {}", &item.name, url);
+        log::warn!(
+            "checksum did not match for {}. downloading from {}",
+            &item.name,
+            url
+        );
         let mut file = File::create(&destination).map_err(|why| DownloadError::Open {
             file: destination.clone(),
-            why
+            why,
         })?;
 
         crate::misc::fetch(url, &mut file)
             .await
-            .map_err(|why| DownloadError::Request { name: filename.to_owned(), why })?;
+            .map_err(|why| DownloadError::Request {
+                name: filename.to_owned(),
+                why,
+            })?;
     }
 
     let digest = File::open(&destination)
         .and_then(hasher::<Sha256, File>)
         .map_err(|why| DownloadError::Open {
             file: destination.clone(),
-            why
+            why,
         })?;
 
     if digest == checksum {
@@ -78,7 +93,7 @@ async fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), Downl
         Err(DownloadError::ChecksumInvalid {
             name: item.name.clone(),
             expected: checksum.to_owned(),
-            received: digest
+            received: digest,
         })
     }
 }
@@ -87,7 +102,13 @@ async fn download_(item: &Source, url: &str, checksum: &str) -> Result<(), Downl
 ///
 /// - If the build directory does not exist, it will be cloned.
 /// - Otherwise, the sources will be pulled from the build directory.
-fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
+fn download_git(
+    name: &str,
+    url: &str,
+    suite: &str,
+    branch: &Option<String>,
+    commit: &Option<String>,
+) -> io::Result<()> {
     let path = env::current_dir()
         .expect("failed to get current directory")
         .join(["build/", suite].concat());
@@ -95,7 +116,11 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
     let path_with_name = path.join(name);
 
     let clone = || -> io::Result<()> {
-        Command::new("git").arg("-C").arg(&path).args(&["clone", &url, name]).run()
+        Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .args(&["clone", &url, name])
+            .run()
     };
 
     let pull = |branch: &str| -> io::Result<()> {
@@ -136,7 +161,7 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
                     .run()?;
                 Ok(branch.as_str())
             }
-            None => Ok("master")
+            None => Ok("master"),
         }
     };
 
@@ -174,7 +199,7 @@ fn download_git(name: &str, url: &str, suite: &str, branch: &Option<String>, com
 fn download_dsc(item: &Source, dsc: &str, suite: &str) -> io::Result<()> {
     let path = PathBuf::from(["build/", suite, "/", &item.name].concat());
     let mut result = Ok(());
-    if ! path.join(crate::misc::filename_from_url(dsc)).exists() {
+    if !path.join(crate::misc::filename_from_url(dsc)).exists() {
         fs::create_dir_all(&path)?;
         let cwd = env::current_dir()?;
         env::set_current_dir(&path)?;

@@ -2,19 +2,25 @@ use crate::checksum::hasher;
 use reqwest::Client;
 use sha2::Sha256;
 use std::fs::{self, File};
+use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::sync::Arc;
-use std::io::Write;
 
 const ATTEMPTS: u8 = 3;
 
 pub enum RequestCompare<'a> {
     Checksum(Option<&'a str>),
-    SizeAndModification(u64, Option<i64>)
+    SizeAndModification(u64, Option<i64>),
 }
 
-pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: RequestCompare<'a>, path: &Path) -> anyhow::Result<u64> {
+pub async fn file<'a>(
+    client: Arc<Client>,
+    _name: String,
+    url: &str,
+    compare: RequestCompare<'a>,
+    path: &Path,
+) -> anyhow::Result<u64> {
     let mut tries = 0;
 
     loop {
@@ -39,10 +45,10 @@ pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: Re
                         }
                     }
                 }
-                _ => ()
+                _ => (),
             }
 
-            if ! requires_download {
+            if !requires_download {
                 return Ok(0);
             }
 
@@ -59,7 +65,7 @@ pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: Re
             File::create(path)?
         };
 
-        info!("downloading package to {}", path.display());
+        log::info!("downloading package to {}", path.display());
 
         let mut response = client.get(url).send().await?;
 
@@ -69,17 +75,20 @@ pub async fn file<'a>(client: Arc<Client>, _name: String, url: &str, compare: Re
 
         file.flush()?;
 
-        info!("finished downloading {}", path.display());
+        log::info!("finished downloading {}", path.display());
         if let RequestCompare::Checksum(Some(checksum)) = compare {
             let digest = hasher::<Sha256, File>(File::open(path)?)?;
             if digest == checksum {
                 return Ok(0);
             } else {
-                error!("checksum does not match for {}, removing.", path.display());
+                log::error!("checksum does not match for {}, removing.", path.display());
                 fs::remove_file(&path)?;
 
                 if tries == ATTEMPTS {
-                    return Err(anyhow::anyhow!("checksum does not match for {}", path.display()));
+                    return Err(anyhow::anyhow!(
+                        "checksum does not match for {}",
+                        path.display()
+                    ));
                 }
 
                 tries += 1;

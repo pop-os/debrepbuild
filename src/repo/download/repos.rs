@@ -1,13 +1,13 @@
-use apt_repo_crawler::{filename_from_url, AptCrawler, AptEntry, AptPackage};
+use super::request::{self, RequestCompare};
 use crate::config::Repo;
+use crate::debian::gen_filename;
+use apt_repo_crawler::{AptCrawler, AptEntry, AptPackage, filename_from_url};
 use crossbeam_channel::bounded;
 use deb_version;
-use crate::debian::gen_filename;
 use reqwest::Client;
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::sync::Arc;
-use super::request::{self, RequestCompare};
 
 pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> anyhow::Result<()> {
     let (in_tx, in_rx) = bounded::<AptEntry>(64);
@@ -15,7 +15,7 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
 
     std::thread::spawn(move || {
         for repo in repos {
-            info!("fetching packages from {}", repo.repo);
+            log::info!("fetching packages from {}", repo.repo);
             let crawler = AptCrawler::new(repo.repo.clone())
                 .filter(Arc::new(repo.clone()))
                 .crawl();
@@ -35,9 +35,9 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
                     file.url.as_str().to_owned(),
                     RequestCompare::SizeAndModification(
                         file.length,
-                        file.modified.map(|m| m.timestamp())
+                        file.modified.map(|m| m.timestamp()),
                     ),
-                    get_destination(desc, &suite, &component)
+                    get_destination(desc, &suite, &component),
                 ));
             }
 
@@ -50,18 +50,23 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
 
         enum Insert {
             Append(String, String),
-            Update(usize, String)
+            Update(usize, String),
         }
 
         for file in in_rx {
             let mut update = None;
             if let Ok(desc) = AptPackage::from_str(filename_from_url(file.url.as_str())) {
                 if let Some(position) = names.iter().position(|name| name == desc.name) {
-                    if deb_version::compare_versions(&versions[position], desc.version) == Ordering::Less {
+                    if deb_version::compare_versions(&versions[position], desc.version)
+                        == Ordering::Less
+                    {
                         update = Some(Insert::Update(position, desc.version.to_owned()));
                     }
                 } else {
-                    update = Some(Insert::Append(desc.name.to_owned(), desc.version.to_owned()));
+                    update = Some(Insert::Append(
+                        desc.name.to_owned(),
+                        desc.version.to_owned(),
+                    ));
                 }
             }
 
@@ -70,11 +75,11 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
                     files.push(file);
                     names.push(name);
                     versions.push(version);
-                },
+                }
                 Some(Insert::Update(pos, version)) => {
                     files[pos] = file;
                     versions[pos] = version;
-                },
+                }
                 None => (),
             }
         }
@@ -83,7 +88,6 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
             send_func(entry);
         }
     });
-
 
     let client = Arc::new(Client::new());
     for (name, url, compare, dest) in out_rx {
@@ -96,17 +100,29 @@ pub async fn download(repos: Vec<Repo>, suite: String, component: String) -> any
 fn get_destination(desc: AptPackage, suite: &str, component: &str) -> PathBuf {
     let dst = match desc.extension {
         "tar.gz" | "tar.xz" | "tar.zst" | "dsc" => ["/", component, "/source/"].concat(),
-        _ => ["/", component, "/binary-", desc.arch, "/"].concat()
+        _ => ["/", component, "/binary-", desc.arch, "/"].concat(),
     };
 
     let filename = gen_filename(&desc.name, &desc.version, &desc.arch, &desc.extension);
     let name = if desc.name.ends_with("-dbg") {
-        &desc.name[..desc.name.len()-4]
+        &desc.name[..desc.name.len() - 4]
     } else if desc.name.ends_with("-dbgsym") {
-        &desc.name[..desc.name.len()-7]
+        &desc.name[..desc.name.len() - 7]
     } else {
         &desc.name
     };
 
-    PathBuf::from(["repo/pool/", suite, &dst, &name[0..1], "/", &name, "/", &filename].concat())
+    PathBuf::from(
+        [
+            "repo/pool/",
+            suite,
+            &dst,
+            &name[0..1],
+            "/",
+            &name,
+            "/",
+            &filename,
+        ]
+        .concat(),
+    )
 }

@@ -3,7 +3,7 @@ const FOUND: u8 = 1;
 pub struct UrlTokenizer<'a> {
     data: &'a str,
     read: usize,
-    flags: u8
+    flags: u8,
 }
 
 #[derive(Debug, PartialEq)]
@@ -11,12 +11,16 @@ pub enum UrlToken<'a> {
     Name,
     Version,
     Unsupported(&'a str),
-    Normal(&'a str)
+    Normal(&'a str),
 }
 
 impl<'a> UrlTokenizer<'a> {
     pub fn new(data: &'a str) -> UrlTokenizer<'a> {
-        UrlTokenizer { data, read: 0, flags: 0 }
+        UrlTokenizer {
+            data,
+            read: 0,
+            flags: 0,
+        }
     }
 
     pub fn finalize(data: &'a str, name: &str, version: &str) -> Result<String, &'a str> {
@@ -26,7 +30,7 @@ impl<'a> UrlTokenizer<'a> {
                 UrlToken::Normal(text) => output.push_str(text),
                 UrlToken::Name => output.push_str(name),
                 UrlToken::Version => output.push_str(version),
-                UrlToken::Unsupported(text) => return Err(text)
+                UrlToken::Unsupported(text) => return Err(text),
             }
         }
 
@@ -51,7 +55,7 @@ impl<'a> Iterator for UrlTokenizer<'a> {
                     let token = match &self.data[start..self.read] {
                         "name" => UrlToken::Name,
                         "version" => UrlToken::Version,
-                        other => UrlToken::Unsupported(other)
+                        other => UrlToken::Unsupported(other),
                     };
 
                     self.read += 1;
@@ -81,7 +85,7 @@ impl<'a> Iterator for UrlTokenizer<'a> {
                 Some(match &remaining[..remaining.len() - 1] {
                     "name" => UrlToken::Name,
                     "version" => UrlToken::Version,
-                    other => UrlToken::Unsupported(other)
+                    other => UrlToken::Unsupported(other),
                 })
             } else {
                 None

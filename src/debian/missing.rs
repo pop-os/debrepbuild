@@ -1,5 +1,5 @@
-use std::io::{self, Write};
 use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::Path;
 
 /// Debian requires these files, but they're usually redundant.
@@ -14,7 +14,11 @@ pub fn create_missing_files(path: &Path) -> io::Result<()> {
 }
 
 fn nonexistent_then_write(path: &Path, contents: &[u8]) -> io::Result<()> {
-    if !path.exists() { write(path, contents) } else { Ok(()) }
+    if !path.exists() {
+        write(path, contents)
+    } else {
+        Ok(())
+    }
 }
 
 fn write(path: &Path, contents: &[u8]) -> io::Result<()> {

@@ -2,7 +2,7 @@ use std::io;
 
 pub struct IteratorReader<T> {
     buffer: Vec<u8>,
-    data: T
+    data: T,
 }
 
 impl<T: Iterator<Item = Vec<u8>>> IteratorReader<T> {
@@ -17,7 +17,7 @@ impl<T: Iterator<Item = Vec<u8>>> io::Read for IteratorReader<T> {
             while self.buffer.len() < buf.len() {
                 match self.data.next() {
                     Some(data) => self.buffer.extend_from_slice(&data),
-                    None => break
+                    None => break,
                 }
             }
 

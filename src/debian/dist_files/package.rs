@@ -19,10 +19,12 @@ impl PackageEntry {
         let control = &mut self.control;
 
         fn get_key(map: &mut BTreeMap<String, String>, key: &str) -> io::Result<String> {
-            map.remove(key).ok_or_else(|| io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("{} not found in control file", key)
-            ))
+            map.remove(key).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("{} not found in control file", key),
+                )
+            })
         }
 
         fn write_entry(output: &mut Vec<u8>, key: &[u8], value: &[u8]) {
@@ -34,8 +36,12 @@ impl PackageEntry {
 
         macro_rules! write_from_map {
             ($key:expr) => {
-                 write_entry(&mut output, $key.as_bytes(), get_key(control, $key)?.as_bytes());
-            }
+                write_entry(
+                    &mut output,
+                    $key.as_bytes(),
+                    get_key(control, $key)?.as_bytes(),
+                );
+            };
         }
 
         macro_rules! optional_map {
@@ -70,7 +76,11 @@ impl PackageEntry {
         if let Some(bugs) = bugs {
             write_entry(&mut output, b"Bugs", bugs.as_bytes());
         }
-        write_entry(&mut output, b"Filename", self.filename.as_os_str().as_bytes());
+        write_entry(
+            &mut output,
+            b"Filename",
+            self.filename.as_os_str().as_bytes(),
+        );
         write_entry(&mut output, b"Size", self.size.to_string().as_bytes());
         write_entry(&mut output, b"MD5sum", self.md5sum.as_bytes());
         write_entry(&mut output, b"SHA1", self.sha1.as_bytes());

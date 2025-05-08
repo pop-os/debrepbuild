@@ -3,15 +3,18 @@ mod extract;
 mod metapackages;
 mod rsync;
 
+use self::artifacts::{LinkError, LinkedArtifact, link_artifact};
+use self::rsync::rsync;
+use super::super::SHARED_ASSETS;
+use super::pool::{KEEP_SOURCE, mv_to_pool};
+use super::version::{changelog, git};
 use crate::command::Command;
 use crate::config::{Config, DebianPath, Direct, Source, SourceLocation};
+use crate::debian;
+use crate::misc;
 use deb_version;
 use debarchive::Archive as DebArchive;
-use crate::debian;
 use glob::glob;
-use crate::misc;
-use self::artifacts::{link_artifact, LinkedArtifact, LinkError};
-use self::rsync::rsync;
 use std::cmp::Ordering;
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -19,9 +22,6 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use subprocess::{self, Exec, Redirection};
-use super::pool::{mv_to_pool, KEEP_SOURCE};
-use super::super::SHARED_ASSETS;
-use super::version::{changelog, git};
 use walkdir::WalkDir;
 
 pub fn all(config: &Config) {
@@ -34,7 +34,7 @@ pub fn all(config: &Config) {
         let build_path = ["build/", &config.archive].concat();
         for source in sources {
             if let Err(why) = build(config, source, &pwd, suite, component, false) {
-                error!("package '{}' failed to build: {}", source.name, why);
+                log::error!("package '{}' failed to build: {}", source.name, why);
                 exit(1);
             }
 
@@ -43,21 +43,25 @@ pub fn all(config: &Config) {
                 &config.archive,
                 &config.default_component,
                 if source.keep_source { KEEP_SOURCE } else { 0 },
-                Some(&source.name)
+                Some(&source.name),
             ) {
-                error!("package '{}' failed to migrate to pool: {}", source.name, why);
+                log::error!(
+                    "package '{}' failed to migrate to pool: {}",
+                    source.name,
+                    why
+                );
                 exit(1);
             }
         }
     }
 
     if let Err(why) = repackage_binaries(config.direct.as_ref(), suite, component) {
-        error!("binary repackage failure: {}", why);
+        log::error!("binary repackage failure: {}", why);
         exit(1);
     }
 
     if let Err(why) = metapackages::generate(&config.archive, &config.default_component) {
-        error!("metapackage generation failed: {}", why);
+        log::error!("metapackage generation failed: {}", why);
         exit(1);
     }
 }
@@ -67,15 +71,23 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
     let mut built = 0;
     match config.source.as_ref() {
         Some(items) => {
-            let sources = items.into_iter()
+            let sources = items
+                .into_iter()
                 .filter(|item| packages.contains(&item.name.as_str()))
                 .collect::<Vec<&Source>>();
 
             migrate_to_pool(config, sources.iter().cloned());
             let build_path = ["build/", &config.archive].concat();
             for source in &sources {
-                if let Err(why) = build(config, source, &pwd, &config.archive, &config.default_component, force) {
-                    error!("package '{}' failed to build: {}", source.name, why);
+                if let Err(why) = build(
+                    config,
+                    source,
+                    &pwd,
+                    &config.archive,
+                    &config.default_component,
+                    force,
+                ) {
+                    log::error!("package '{}' failed to build: {}", source.name, why);
                     exit(1);
                 }
 
@@ -84,23 +96,31 @@ pub fn packages(config: &Config, packages: &[&str], force: bool) {
                     &config.archive,
                     &config.default_component,
                     if source.keep_source { KEEP_SOURCE } else { 0 },
-                    Some(&source.name)
+                    Some(&source.name),
                 ) {
-                    error!("package '{}' failed to migrate to pool: {}", source.name, why);
+                    log::error!(
+                        "package '{}' failed to migrate to pool: {}",
+                        source.name,
+                        why
+                    );
                     exit(1);
                 }
 
                 built += 1;
                 if built == packages.len() {
-                    break
+                    break;
                 }
             }
-        },
-        None => warn!("no packages built")
+        }
+        None => log::warn!("no packages built"),
     }
 }
 
-fn repackage_binaries(packages: Option<&Vec<Direct>>, suite: &str, component: &str) -> io::Result<()> {
+fn repackage_binaries(
+    packages: Option<&Vec<Direct>>,
+    suite: &str,
+    component: &str,
+) -> io::Result<()> {
     if let Some(packages) = packages {
         for package in packages {
             for destinations in package.get_destinations(suite, component).unwrap() {
@@ -119,8 +139,8 @@ fn repackage_binaries(packages: Option<&Vec<Direct>>, suite: &str, component: &s
 
 /// If source binary exists, and the files to replace are newer than the file in the pool, repackage.
 fn needs_to_repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<bool> {
-    info!("checking if {:?} needs to be repackaged", pool);
-    if ! pool.exists() || ! source.exists() || ! replace.exists() {
+    log::info!("checking if {:?} needs to be repackaged", pool);
+    if !pool.exists() || !source.exists() || !replace.exists() {
         return Ok(true);
     }
 
@@ -135,15 +155,15 @@ fn needs_to_repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<
 }
 
 fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
-    info!("repackaging {:?}", pool);
+    log::info!("repackaging {:?}", pool);
 
-    debug!("source: {:?}", source);
-    debug!("replace: {:?}", replace);
+    log::debug!("source: {:?}", source);
+    log::debug!("replace: {:?}", replace);
 
     let data_replace = replace.join("data");
     let control_replace = replace.join("DEBIAN");
 
-    if ! control_replace.exists() {
+    if !control_replace.exists() {
         fs::create_dir_all(&control_replace)?;
     }
 
@@ -179,7 +199,7 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources: I) {
+fn migrate_to_pool<'a, I: Iterator<Item = &'a Source>>(config: &Config, sources: I) {
     let build_path = ["build/", &config.archive].concat();
     for source in sources {
         if let Err(why) = mv_to_pool(
@@ -187,57 +207,84 @@ fn migrate_to_pool<'a , I: Iterator<Item = &'a Source>>(config: &Config, sources
             &config.archive,
             &config.default_component,
             if source.keep_source { KEEP_SOURCE } else { 0 },
-            Some(&source.name)
+            Some(&source.name),
         ) {
-            error!("package '{}' failed to migrate to pool: {}", source.name, why);
+            log::error!(
+                "package '{}' failed to migrate to pool: {}",
+                source.name,
+                why
+            );
             exit(1);
         }
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    #[fail(display = "command for {} failed due to {:?}", package, reason)]
-    Build { package: String, reason: subprocess::ExitStatus },
-    #[fail(display = "failed to get changelog for {}: {}", package, why)]
+    #[error("command for {} failed due to {:?}", package, reason)]
+    Build {
+        package: String,
+        reason: subprocess::ExitStatus,
+    },
+    #[error("failed to get changelog for {}: {}", package, why)]
     Changelog { package: String, why: io::Error },
-    #[fail(display = "{} command failed to execute: {}", cmd, why)]
+    #[error("{} command failed to execute: {}", cmd, why)]
     Command { cmd: &'static str, why: io::Error },
-    #[fail(display = "unsupported conditional build rule: {}", rule)]
+    #[error("unsupported conditional build rule: {}", rule)]
     ConditionalRule { rule: String },
-    #[fail(display = "failed to set debian changelog: {}", why)]
+    #[error("failed to set debian changelog: {}", why)]
     Debchange { why: io::Error },
-    #[fail(display = "failed to create missing debian files for {:?}: {}", path, why)]
+    #[error("failed to create missing debian files for {:?}: {}", path, why)]
     DebFile { path: PathBuf, why: io::Error },
-    #[fail(display = "failed to create directory for {:?}: {}", path, why)]
+    #[error("failed to create directory for {:?}: {}", path, why)]
     Directory { path: PathBuf, why: io::Error },
-    #[fail(display = "failed to move dsc files: {:?}", why)]
+    #[error("failed to move dsc files: {:?}", why)]
     DscMove { why: io::Error },
-    #[fail(display = "failed to extract {:?} to {:?}: {}", src, dst, why)]
-    Extract { src: PathBuf, dst: PathBuf, why: io::Error },
-    #[fail(display = "failed to switch to branch {} on {}: {}", branch, package, why)]
-    GitBranch { package: String, branch: String, why: io::Error },
-    #[fail(display = "failed to get git commit for {}: {}", package, why)]
+    #[error("failed to extract {:?} to {:?}: {}", src, dst, why)]
+    Extract {
+        src: PathBuf,
+        dst: PathBuf,
+        why: io::Error,
+    },
+    #[error("failed to switch to branch {} on {}: {}", branch, package, why)]
+    GitBranch {
+        package: String,
+        branch: String,
+        why: io::Error,
+    },
+    #[error("failed to get git commit for {}: {}", package, why)]
     GitCommit { package: String, why: io::Error },
-    #[fail(display = "failed to link {:?} to {:?}: {}", src, dst, why)]
-    Link { src: PathBuf, dst: PathBuf, why: io::Error },
-    #[fail(display = "failed due to missing dependencies")]
+    #[error("failed to link {:?} to {:?}: {}", src, dst, why)]
+    Link {
+        src: PathBuf,
+        dst: PathBuf,
+        why: io::Error,
+    },
+    #[error("failed due to missing dependencies")]
     MissingDependencies,
-    #[fail(display = "no version listed in changelog for {}", package)]
+    #[error("no version listed in changelog for {}", package)]
     NoChangelogVersion { package: String },
-    #[fail(display = "failed to open file at {:?}: {}", file, why)]
+    #[error("failed to open file at {:?}: {}", file, why)]
     Open { file: PathBuf, why: io::Error },
-    #[fail(display = "failed to read file at {:?}: {}", file, why)]
+    #[error("failed to read file at {:?}: {}", file, why)]
     Read { file: PathBuf, why: io::Error },
-    #[fail(display = "failed to update record for {}: {}", package, why)]
+    #[error("failed to update record for {}: {}", package, why)]
     RecordUpdate { package: String, why: io::Error },
-    #[fail(display = "rsyncing {:?} to {:?} failed: {}", src, dst, why)]
-    Rsync { src: PathBuf, dst: PathBuf, why: io::Error },
+    #[error("rsyncing {:?} to {:?} failed: {}", src, dst, why)]
+    Rsync {
+        src: PathBuf,
+        dst: PathBuf,
+        why: io::Error,
+    },
 }
 
 impl From<LinkError> for BuildError {
     fn from(err: LinkError) -> BuildError {
-        BuildError::Link { src: err.src, dst: err.dst, why: err.why }
+        BuildError::Link {
+            src: err.src,
+            dst: err.dst,
+            why: err.why,
+        }
     }
 }
 
@@ -251,9 +298,11 @@ fn fetch_assets(
         if path.is_dir() {
             let relative = path.strip_prefix(src).unwrap();
             let new_path = dst.join(relative);
-            if ! new_path.exists() {
-                fs::create_dir_all(&new_path)
-                    .map_err(|why| BuildError::Directory { path: new_path, why })?;
+            if !new_path.exists() {
+                fs::create_dir_all(&new_path).map_err(|why| BuildError::Directory {
+                    path: new_path,
+                    why,
+                })?;
             }
         } else {
             let relative = path.strip_prefix(src).unwrap();
@@ -275,8 +324,15 @@ fn fetch_assets(
 }
 
 /// Attempts to build Debian packages from a given software repository.
-pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component: &str, force: bool) -> Result<(), BuildError> {
-    info!("attempting to build {}", &item.name);
+pub fn build(
+    config: &Config,
+    item: &Source,
+    pwd: &Path,
+    suite: &str,
+    component: &str,
+    force: bool,
+) -> Result<(), BuildError> {
+    log::info!("attempting to build {}", &item.name);
     let project_directory = pwd.join(&["build/", suite, "/", &item.name].concat());
 
     let mut dsc_file = None;
@@ -296,15 +352,22 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
                 misc::copy(&src, &project_directory.join(filename))
             };
 
-            result.map_err(|why| BuildError::Extract { src, dst: project_directory.clone(), why })?;
+            result.map_err(|why| BuildError::Extract {
+                src,
+                dst: project_directory.clone(),
+                why,
+            })?;
         }
         Some(SourceLocation::Dsc { ref dsc }) => {
             dsc_file = Some(misc::filename_from_url(dsc));
         }
-        Some(SourceLocation::Git { ref commit, ref branch, .. }) => {
-            debchange_git(suite, &config.version, &project_directory, branch, commit).map_err(|why| {
-                BuildError::Debchange { why }
-            })?;
+        Some(SourceLocation::Git {
+            ref commit,
+            ref branch,
+            ..
+        }) => {
+            debchange_git(suite, &config.version, &project_directory, branch, commit)
+                .map_err(|why| BuildError::Debchange { why })?;
         }
         _ => (),
     }
@@ -317,30 +380,32 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
             Some(DebianPath::URL { .. }) => {
                 unimplemented!()
             }
-            Some(DebianPath::Branch { ref url, ref branch }) => {
-                merge_branch(url, branch)
-                    .map_err(|why| BuildError::GitBranch {
-                        package: item.name.clone(),
-                        branch: branch.clone(),
-                        why
-                    })?;
+            Some(DebianPath::Branch {
+                ref url,
+                ref branch,
+            }) => {
+                merge_branch(url, branch).map_err(|why| BuildError::GitBranch {
+                    package: item.name.clone(),
+                    branch: branch.clone(),
+                    why,
+                })?;
             }
             None => {
                 let debian_path = pwd.join(&["debian/", suite, "/", &item.name, "/"].concat());
                 if debian_path.exists() {
                     let project_debian_path = project_directory.join("debian/");
-                    rsync(&debian_path, &project_debian_path)
-                        .map_err(|why| BuildError::Rsync {
-                            src: debian_path,
-                            dst: project_debian_path.clone(),
-                            why
-                        })?;
+                    rsync(&debian_path, &project_debian_path).map_err(|why| BuildError::Rsync {
+                        src: debian_path,
+                        dst: project_debian_path.clone(),
+                        why,
+                    })?;
 
-                    debian::create_missing_files(&project_debian_path)
-                        .map_err(|why| BuildError::DebFile {
+                    debian::create_missing_files(&project_debian_path).map_err(|why| {
+                        BuildError::DebFile {
                             path: project_debian_path,
-                            why
-                        })?;
+                            why,
+                        }
+                    })?;
                 }
             }
         }
@@ -348,8 +413,8 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
         match pwd.join(&["assets/packages/", &item.name].concat()) {
             ref local_assets if local_assets.exists() => {
                 fetch_assets(&mut linked, local_assets, &project_directory)?;
-            },
-            _ => ()
+            }
+            _ => (),
         }
 
         if let Some(ref assets) = item.assets {
@@ -369,7 +434,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
                         // Then the destination will point to the build directory for this package.
                         let dst = project_directory.join(&dst);
                         if let Some(parent) = dst.parent() {
-                            if ! parent.exists() {
+                            if !parent.exists() {
                                 let _ = fs::create_dir_all(&parent);
                             }
                         }
@@ -395,9 +460,7 @@ pub fn build(config: &Config, item: &Source, pwd: &Path, suite: &str, component:
     )?;
 
     if !skipped && dsc_file.is_some() {
-        misc::copy_here(&item.name).map_err(|why| {
-            BuildError::DscMove { why }
-        })?;
+        misc::copy_here(&item.name).map_err(|why| BuildError::DscMove { why })?;
     }
 
     let _ = env::set_current_dir("../..");
@@ -424,7 +487,7 @@ fn pre_flight(
     component: &str,
     dsc: Option<&str>,
     dir: &Path,
-    force: bool
+    force: bool,
 ) -> Result<bool, BuildError> {
     let name = &item.name;
     let record_path = PathBuf::from(["../../record/", suite, "/", &name].concat());
@@ -436,13 +499,20 @@ fn pre_flight(
         CommitAppend(String, String),
     }
 
-    fn compare_record<F>(force: bool, record_path: &Path, mut compare: F) -> Result<bool, BuildError>
-        where F: FnMut(::std::str::Lines) -> Result<bool, BuildError>
+    fn compare_record<F>(
+        force: bool,
+        record_path: &Path,
+        mut compare: F,
+    ) -> Result<bool, BuildError>
+    where
+        F: FnMut(::std::str::Lines) -> Result<bool, BuildError>,
     {
         if !force && record_path.exists() {
-            let record = misc::read_to_string(&record_path)
-                .map_err(|why| BuildError::Read { file: record_path.to_owned(), why })?;
-            return compare(record.lines())
+            let record = misc::read_to_string(&record_path).map_err(|why| BuildError::Read {
+                file: record_path.to_owned(),
+                why,
+            })?;
+            return compare(record.lines());
         }
 
         Ok(false)
@@ -457,7 +527,7 @@ fn pre_flight(
                 }
             }
 
-            info!("building {} at dsc version {}", name, dsc);
+            log::info!("building {} at dsc version {}", name, dsc);
             Ok(false)
         })?;
 
@@ -468,10 +538,15 @@ fn pre_flight(
                 let version = changelog(&dir.join("debian/changelog"), 1)
                     .map_err(|why| BuildError::Changelog {
                         package: item.name.clone(),
-                        why
-                    }).and_then(|x| x.into_iter().next().ok_or_else(|| BuildError::NoChangelogVersion {
-                        package: item.name.clone(),
-                    }))?;
+                        why,
+                    })
+                    .and_then(|x| {
+                        x.into_iter()
+                            .next()
+                            .ok_or_else(|| BuildError::NoChangelogVersion {
+                                package: item.name.clone(),
+                            })
+                    })?;
 
                 skip = compare_record(force, &record_path, |mut lines| {
                     if let (Some(source), Some(recorded_version)) = (lines.next(), lines.next()) {
@@ -480,7 +555,7 @@ fn pre_flight(
                         }
                     }
 
-                    info!("building {} at changelog version {}", name, version);
+                    log::info!("building {} at changelog version {}", name, version);
                     Ok(false)
                 })?;
 
@@ -489,7 +564,7 @@ fn pre_flight(
             Some("commit") => {
                 let (branch, commit) = git(dir).map_err(|why| BuildError::GitCommit {
                     package: item.name.clone(),
-                    why
+                    why,
                 })?;
 
                 let append = &mut false;
@@ -510,10 +585,14 @@ fn pre_flight(
                         }
                     }
 
-                    info!("building {} at git branch {}; commit {}", name, branch, commit);
+                    log::info!(
+                        "building {} at git branch {}; commit {}",
+                        name,
+                        branch,
+                        commit
+                    );
                     Ok(false)
                 })?;
-
 
                 Some(if *append {
                     Record::CommitAppend(branch, commit)
@@ -522,15 +601,17 @@ fn pre_flight(
                 })
             }
             Some(rule) => {
-                return Err(BuildError::ConditionalRule { rule: rule.to_owned() });
+                return Err(BuildError::ConditionalRule {
+                    rule: rule.to_owned(),
+                });
             }
             None => None,
         }
     };
 
     if skip {
-        info!("{} has already been built -- skipping", name);
-        return Ok(true)
+        log::info!("{} has already been built -- skipping", name);
+        return Ok(true);
     }
 
     let path;
@@ -538,8 +619,8 @@ fn pre_flight(
         Some(dsc) => {
             path = dir.join(dsc);
             &path
-        },
-        None => dir
+        }
+        None => dir,
     };
 
     config
@@ -548,9 +629,7 @@ fn pre_flight(
         .try_for_each(|arch| sbuild(config, item, &pwd, suite, component, dir, arch))?;
 
     let result = match record {
-        Some(Record::Dsc(dsc)) => {
-            misc::write(record_path, ["dsc\n", dsc].concat().as_bytes())
-        }
+        Some(Record::Dsc(dsc)) => misc::write(record_path, ["dsc\n", dsc].concat().as_bytes()),
         Some(Record::Changelog(version)) => {
             misc::write(record_path, ["changelog\n", &version].concat().as_bytes())
         }
@@ -566,7 +645,10 @@ fn pre_flight(
         None => Ok(()),
     };
 
-    result.map_err(|why| BuildError::RecordUpdate { package: item.name.to_string(), why })?;
+    result.map_err(|why| BuildError::RecordUpdate {
+        package: item.name.to_string(),
+        why,
+    })?;
     Ok(false)
 }
 
@@ -582,10 +664,13 @@ fn sbuild<P: AsRef<Path>>(
     let log_path = pwd.join(["logs/", suite, "/", &format!("{}-{}", item.name, arch)].concat());
     let mut command = Exec::cmd("sbuild")
         .args(&[
-            "-v", "--log-external-command-output", "--log-external-command-error",
+            "-v",
+            "--log-external-command-output",
+            "--log-external-command-log::error",
             &format!("--host={}", arch),
             // "--dpkg-source-opt=-Zgzip", // Use this when testing
-            "-d", suite
+            "-d",
+            suite,
         ])
         .stdout(Redirection::Merge)
         .stderr(Redirection::File(
@@ -594,13 +679,15 @@ fn sbuild<P: AsRef<Path>>(
                 .truncate(true)
                 .create(true)
                 .open(&log_path)
-                .map_err(|why| BuildError::Open { file: log_path, why })?
+                .map_err(|why| BuildError::Open {
+                    file: log_path,
+                    why,
+                })?,
         ));
 
     if let Some(ref depends) = item.depends {
         let pool = pwd.join(&["repo/pool/", suite, "/", component].concat());
-        let deb_iter = misc::walk_debs(&pool, false)
-            .flat_map(|deb| misc::match_deb(&deb, depends));
+        let deb_iter = misc::walk_debs(&pool, false).flat_map(|deb| misc::match_deb(&deb, depends));
 
         let mut temp: Vec<(String, usize, String, String)> = Vec::new();
         for (deb, pos) in deb_iter {
@@ -616,12 +703,12 @@ fn sbuild<P: AsRef<Path>>(
                         stored_dep.1 = pos;
                         stored_dep.2 = name.clone();
                         stored_dep.3 = version.clone();
-                        continue
+                        continue;
                     }
                 }
             }
 
-            if ! found {
+            if !found {
                 temp.push((deb, pos, name, version));
             }
         }
@@ -629,7 +716,11 @@ fn sbuild<P: AsRef<Path>>(
         if depends.len() != temp.len() {
             for dependency in depends {
                 if !temp.iter().any(|x| x.0.contains(dependency)) {
-                    error!("dependency for {} not found: {}", path.as_ref().display(), dependency)
+                    log::error!(
+                        "dependency for {} not found: {}",
+                        path.as_ref().display(),
+                        dependency
+                    )
                 }
             }
 
@@ -666,28 +757,30 @@ fn sbuild<P: AsRef<Path>>(
 
     command = command.arg(path.as_ref());
 
-    debug!("executing {:#?}", command);
+    log::debug!("executing {:#?}", command);
 
-    let exit_status = command.join()
-        .map_err(|why| BuildError::Command {
-            cmd: "sbuild",
-            why: io::Error::new(
-                io::ErrorKind::Other,
-                format!("{:?}", why)
-            )
-        })?;
+    let exit_status = command.join().map_err(|why| BuildError::Command {
+        cmd: "sbuild",
+        why: io::Error::new(io::ErrorKind::Other, format!("{:?}", why)),
+    })?;
 
     if exit_status.success() {
         Ok(())
     } else {
         Err(BuildError::Build {
             package: item.name.clone(),
-            reason: exit_status
+            reason: exit_status,
         })
     }
 }
 
-fn debchange_git(suite: &str, version: &str, project_directory: &Path, branch: &Option<String>, commit: &Option<String>) -> io::Result<()> {
+fn debchange_git(
+    suite: &str,
+    version: &str,
+    project_directory: &Path,
+    branch: &Option<String>,
+    commit: &Option<String>,
+) -> io::Result<()> {
     let commit_;
     let mut commit = match commit {
         Some(commit) => commit.trim(),
@@ -698,7 +791,7 @@ fn debchange_git(suite: &str, version: &str, project_directory: &Path, branch: &
                 .arg("rev-parse")
                 .arg(match branch {
                     Some(branch) => branch.as_str(),
-                    None => "master"
+                    None => "master",
                 })
                 .run_with_stdout()?;
 
@@ -718,9 +811,11 @@ fn debchange_git(suite: &str, version: &str, project_directory: &Path, branch: &
 
     Command::new("dch")
         .args(&[
-            "-D", suite,
-            "-l", &["~", timestamp.trim(), "~", version, "~", commit].concat(),
-            "-c"
+            "-D",
+            suite,
+            "-l",
+            &["~", timestamp.trim(), "~", version, "~", commit].concat(),
+            "-c",
         ])
         .arg(&project_directory.join("debian/changelog"))
         .arg(&format!("automatic build of commit {}", commit))

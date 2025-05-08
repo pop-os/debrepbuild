@@ -4,7 +4,7 @@ pub fn get_debian_package_info(package: &Path) -> Option<(String, String)> {
     let mut filename = package.file_name()?.to_str()?;
     let mut underscore_pos = filename.find('_')?;
     let name = &filename[..underscore_pos];
-    filename = &filename[underscore_pos+1..];
+    filename = &filename[underscore_pos + 1..];
     underscore_pos = filename.find('_')?;
     Some((
         if filename.ends_with("ddeb") {
@@ -12,7 +12,7 @@ pub fn get_debian_package_info(package: &Path) -> Option<(String, String)> {
         } else {
             name.to_owned()
         },
-        filename[..underscore_pos].to_owned()
+        filename[..underscore_pos].to_owned(),
     ))
 }
 

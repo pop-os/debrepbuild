@@ -1,15 +1,15 @@
 pub mod archive;
 pub mod dist_files;
-pub mod missing;
 pub mod info;
+pub mod missing;
 
 pub use self::dist_files::*;
-pub use self::missing::*;
 pub use self::info::*;
+pub use self::missing::*;
 
+use crate::compress::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use crate::compress::*;
 
 pub const DEB_SOURCE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.xz", ".tar.zst", ".dsc"];
 pub const DEB_DEBUG_EXTENSION: &str = ".ddeb";
@@ -26,7 +26,7 @@ pub type ContentList = Vec<(PathBuf, String)>;
 
 pub fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
     let (name, dbg_mon, ext) = if name.ends_with("-dbg") {
-        (&name[..name.len()-4], "-dbgsym", "ddeb")
+        (&name[..name.len() - 4], "-dbgsym", "ddeb")
     } else if name.ends_with("-dbgsym") {
         (name, "", "ddeb")
     } else if ext == "ddeb" {

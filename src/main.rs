@@ -1,14 +1,5 @@
-#[macro_use]
-extern crate clap;
-#[macro_use]
-extern crate failure_derive;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate serde_derive;
-
-mod cli;
 pub mod checksum;
+mod cli;
 pub mod command;
 pub mod compress;
 pub mod config;
@@ -18,13 +9,13 @@ pub mod misc;
 mod repo;
 pub mod url;
 
-use clap::{Arg, App, AppSettings, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand, crate_authors, crate_version};
 use cli::Action;
 use config::{Config, ConfigFetch, SourceLocation};
 use repo::{Packages, Repo};
-use std::{env, fs, io};
 use std::path::PathBuf;
 use std::process::exit;
+use std::{env, fs, io};
 use url::UrlTokenizer;
 
 pub const SHARED_ASSETS: &str = "assets/share/";
@@ -133,23 +124,21 @@ async fn read_configs<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
     let mut configs = Vec::new();
 
     let suites: Vec<PathBuf> = match matches.values_of("suites") {
-        Some(suites) => {
-            suites
-                .map(|x| PathBuf::from(["suites/", &x, ".toml"].concat()))
-                .collect()
-        }
+        Some(suites) => suites
+            .map(|x| PathBuf::from(["suites/", &x, ".toml"].concat()))
+            .collect(),
         None => {
             let mut suites = Vec::new();
             for file in fs::read_dir("suites")? {
                 let file = match file {
                     Ok(file) => file,
-                    Err(_) => continue
+                    Err(_) => continue,
                 };
 
                 let filename = file.file_name();
                 let filename = match filename.as_os_str().to_str() {
                     Some(filename) => filename,
-                    None => continue
+                    None => continue,
                 };
 
                 if filename.ends_with(".toml") {
@@ -162,22 +151,25 @@ async fn read_configs<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
     };
 
     for suite in suites {
-        let mut config = config::parse(suite).map_err(|why| io::Error::new(
-            io::ErrorKind::Other,
-            format!("configuration parsing error: {}", why)
-        ))?;
+        let mut config = config::parse(suite).map_err(|why| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("configuration parsing error: {:?}", why),
+            )
+        })?;
 
         if let Some(ref mut sources) = config.source {
             for source in sources {
                 if let Some(ref version) = source.version {
                     if let Some(SourceLocation::Dsc { ref mut dsc }) = source.location {
-                        *dsc = UrlTokenizer::finalize(&dsc, &source.name, &version)
-                            .map_err(|text|
+                        *dsc = UrlTokenizer::finalize(&dsc, &source.name, &version).map_err(
+                            |text| {
                                 io::Error::new(
                                     io::ErrorKind::InvalidData,
-                                    format!("unsupported variable: {}", text)
+                                    format!("unsupported variable: {}", text),
                                 )
-                            )?;
+                            },
+                        )?;
                     }
                 }
             }
@@ -195,7 +187,7 @@ async fn read_configs<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
 }
 
 async fn apply_config<'a>(mut config: Config, matches: &ArgMatches<'a>) {
-    info!("Building from config at {}", config.path.display());
+    log::info!("Building from config at {}", config.path.display());
     match Action::new(&matches) {
         Action::Build(packages, force) => {
             Repo::prepare(config, Packages::Select(&packages, force))
@@ -203,43 +195,43 @@ async fn apply_config<'a>(mut config: Config, matches: &ArgMatches<'a>) {
                 .await
                 .build()
                 .generate();
-        },
+        }
         Action::Clean => {
             Repo::prepare(config, Packages::All).clean();
-        },
+        }
         Action::Dist => {
             Repo::prepare(config, Packages::All).generate();
-        },
+        }
         Action::Fetch(key) => match config.fetch(&key) {
             Some(value) => println!("{}: {}", key, value),
             None => {
-                error!("config field not found");
+                log::error!("config field not found");
                 exit(1);
             }
         },
         Action::FetchConfig => println!("{}: {:#?}", config.path.display(), &config),
         Action::Migrate(packages, from_component, to_component) => {
             if let Err(why) = repo::migrate(&config, &packages, from_component, to_component) {
-                error!("migration failed: {}", why);
+                log::error!("migration failed: {}", why);
                 exit(1);
             }
-        },
+        }
         Action::Pool => {
             Repo::prepare(config, Packages::All).download().await;
-        },
+        }
         Action::Remove(packages) => {
             Repo::prepare(config, Packages::Select(&packages, false)).remove();
-        },
+        }
         Action::Update(key, value) => match config.update(key, value.to_owned()) {
             Ok(()) => match config.write_to_disk() {
-                Ok(()) => info!("successfully wrote config changes to disk"),
+                Ok(()) => log::info!("successfully wrote config changes to disk"),
                 Err(why) => {
-                    error!("failed to write config changes: {}", why);
+                    log::error!("failed to write config changes: {}", why);
                     exit(1);
                 }
             },
             Err(why) => {
-                error!("failed to update {}: {}", key, why);
+                log::error!("failed to update {}: {}", key, why);
                 exit(1);
             }
         },

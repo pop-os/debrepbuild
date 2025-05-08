@@ -1,18 +1,19 @@
+use super::{ConfigError, ConfigFetch};
 use crate::debian::DEB_SOURCE_EXTENSIONS;
-use std::path::PathBuf;
+use crate::misc;
+use crate::url::UrlTokenizer;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::io;
-use crate::url::UrlTokenizer;
-use super::{ConfigError, ConfigFetch};
-use crate::misc;
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Update {
-    pub source:     String,
-    pub url:        String,
-    pub after:      String,
-    pub before:     String,
-    pub contains:   Option<String>,
+    pub source: String,
+    pub url: String,
+    pub after: String,
+    pub before: String,
+    pub contains: Option<String>,
     pub build_from: Option<Vec<String>>,
 }
 
@@ -30,42 +31,62 @@ pub struct BinaryDestinations {
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct DirectPath {
     pub checksum: Option<String>,
-    pub arch:     Option<String>,
-    pub name:     Option<String>,
-    pub url:      String,
+    pub arch: Option<String>,
+    pub name: Option<String>,
+    pub url: String,
 }
 
 /// A Debian package which already exists and may be downloaded directly.
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Direct {
-    pub name:      String,
-    pub version:   String,
-    pub urls:      Vec<DirectPath>,
-    pub checksum:  Option<String>,
-    pub update:    Option<Update>,
+    pub name: String,
+    pub version: String,
+    pub urls: Vec<DirectPath>,
+    pub checksum: Option<String>,
+    pub update: Option<Update>,
 }
 
 impl Direct {
-    pub fn get_destinations(&self, suite: &str, component: &str) -> io::Result<Vec<BinaryDestinations>> {
+    pub fn get_destinations(
+        &self,
+        suite: &str,
+        component: &str,
+    ) -> io::Result<Vec<BinaryDestinations>> {
         let mut output = Vec::new();
 
         fn gen_filename(name: &str, version: &str, arch: &str, ext: &str) -> String {
             if DEB_SOURCE_EXTENSIONS.into_iter().any(|x| &x[1..] == ext) {
-                [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, ".", ext].concat()
+                [
+                    name,
+                    if ext == "ddeb" { "-dbgsym_" } else { "_" },
+                    version,
+                    ".",
+                    ext,
+                ]
+                .concat()
             } else {
-                [name, if ext == "ddeb" { "-dbgsym_" } else { "_" }, version, "_", arch, ".", ext].concat()
+                [
+                    name,
+                    if ext == "ddeb" { "-dbgsym_" } else { "_" },
+                    version,
+                    "_",
+                    arch,
+                    ".",
+                    ext,
+                ]
+                .concat()
             }
         }
 
         for file_item in &self.urls {
             let name: &str = file_item.name.as_ref().map_or(&self.name, |x| &x);
-            let url = UrlTokenizer::finalize(&file_item.url, name, &self.version)
-                .map_err(|text|
+            let url =
+                UrlTokenizer::finalize(&file_item.url, name, &self.version).map_err(|text| {
                     io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("unsupported variable: {}", text)
+                        format!("unsupported variable: {}", text),
                     )
-                )?;
+                })?;
 
             let mut assets = None;
 
@@ -75,10 +96,12 @@ impl Direct {
                 let ext_pos = {
                     let mut ext_pos = file.rfind('.').unwrap_or_else(|| file.len()) + 1;
                     match &file[ext_pos..] {
-                        "gz" | "xz" | "zst" => if "tar" == &file[ext_pos - 4..ext_pos - 1] {
-                            ext_pos -= 4;
+                        "gz" | "xz" | "zst" => {
+                            if "tar" == &file[ext_pos - 4..ext_pos - 1] {
+                                ext_pos -= 4;
+                            }
                         }
-                        _ => ()
+                        _ => (),
                     }
                     ext_pos
                 };
@@ -91,8 +114,10 @@ impl Direct {
 
                 let filename = gen_filename(name, &self.version, arch, extension);
                 let dst = match extension {
-                    "tar.gz" | "tar.xz" | "tar.zst" | "dsc" => ["/", component, "/source/"].concat(),
-                    _ => ["/", component, "/binary-", arch, "/"].concat()
+                    "tar.gz" | "tar.xz" | "tar.zst" | "dsc" => {
+                        ["/", component, "/source/"].concat()
+                    }
+                    _ => ["/", component, "/binary-", arch, "/"].concat(),
                 };
 
                 if extension == "deb" {
@@ -100,13 +125,24 @@ impl Direct {
                     let files = PathBuf::from([&base, "files"].concat());
                     if files.exists() {
                         let replace = PathBuf::from([base.as_str(), filename.as_str()].concat());
-                        debug!("setting asset target to {:?}", replace);
+                        log::debug!("setting asset target to {:?}", replace);
                         assets = Some((files, replace));
                     }
                 }
 
-
-                PathBuf::from(["repo/pool/", suite, &dst, &name[0..1], "/", name, "/", &filename].concat())
+                PathBuf::from(
+                    [
+                        "repo/pool/",
+                        suite,
+                        &dst,
+                        &name[0..1],
+                        "/",
+                        name,
+                        "/",
+                        &filename,
+                    ]
+                    .concat(),
+                )
             };
 
             output.push(BinaryDestinations { assets, pool, url });
