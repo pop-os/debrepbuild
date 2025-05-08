@@ -50,7 +50,6 @@ checksum = "595d3cfa7a60d4555cb5067b99f07142a08ea778de5cf993f7b75c7d8fabc486"
 [[package]]
 name = "apt-repo-crawler"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/apt-repo-crawler#52c3d4f11c2adafe0e9013e55f39351cf790f191"
 dependencies = [
  "chrono",
  "url-crawler",

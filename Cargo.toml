@@ -8,13 +8,16 @@ repository = "https://github.com/pop-os/debrepbuild"
 authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
 edition = "2024"
 
+[workspace]
+members = ["apt-repo-crawler"]
+
 [[bin]]
 name = "debrep"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.42"
-apt-repo-crawler = { git = "https://github.com/pop-os/apt-repo-crawler" }
+apt-repo-crawler = { path = "./apt-repo-crawler" }
 bus_writer = "0.1"
 clap = "2.32.0"
 crossbeam-channel = "0.5"

@@ -1,0 +1,9 @@
+[package]
+name = "apt-repo-crawler"
+version = "0.1.0"
+authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+url-crawler = "0.3.0"
+chrono = "0.4.6"
