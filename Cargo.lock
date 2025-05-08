@@ -3042,8 +3042,6 @@ dependencies = [
 [[package]]
 name = "url-crawler"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9299027340d5086a303cc51506dc9ff6dc7fb26e21389291f94f4f133541cdc"
 dependencies = [
  "bitflags 1.2.1",
  "chrono",

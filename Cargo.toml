@@ -9,7 +9,7 @@ authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
 edition = "2024"
 
 [workspace]
-members = ["apt-repo-crawler"]
+members = ["apt-repo-crawler", "url-crawler"]
 
 [[bin]]
 name = "debrep"

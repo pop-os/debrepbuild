@@ -5,5 +5,5 @@ authors = ["Michael Aaron Murphy <mmstickman@gmail.com>"]
 license = "MIT"
 
 [dependencies]
-url-crawler = "0.3.0"
+url-crawler = { path = "../url-crawler" }
 chrono = "0.4.6"
