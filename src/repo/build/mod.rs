@@ -666,7 +666,7 @@ fn sbuild<P: AsRef<Path>>(
         .args(&[
             "-v",
             "--log-external-command-output",
-            "--log-external-command-log::error",
+            "--log-external-command-error",
             &format!("--host={}", arch),
             // "--dpkg-source-opt=-Zgzip", // Use this when testing
             "-d",
