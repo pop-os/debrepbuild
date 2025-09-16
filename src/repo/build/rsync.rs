@@ -18,7 +18,7 @@ pub fn rsync(src: &Path, dst: &Path) -> io::Result<()> {
     }
 
     Command::new("rsync")
-        .args(&["--ignore-existing", "-avz"])
+        .args(&["-avz"])
         .arg(src)
         .arg(dst)
         .run()
