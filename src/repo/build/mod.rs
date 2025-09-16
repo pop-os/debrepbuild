@@ -190,7 +190,7 @@ fn repackage(source: &Path, replace: &Path, pool: &Path) -> io::Result<()> {
     }
 
     if control_replace.exists() {
-        rsync(&control_replace, &data_dir)?;
+        rsync(&control_replace, &control_dir)?;
     }
 
     fs::create_dir_all(pool.parent().unwrap())?;
