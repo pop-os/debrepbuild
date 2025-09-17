@@ -50,7 +50,7 @@ fn main() {
     // Relaunch with fakeroot if not running as root
     if unsafe { libc::geteuid() } != 0 {
         _ = std::process::Command::new("/usr/bin/fakeroot")
-            .arg(std::env::args_os().next().unwrap())
+            .args(std::env::args_os())
             .exec();
         std::process::exit(1);
     }
