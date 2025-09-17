@@ -13,6 +13,7 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand, crate_authors, crate_v
 use cli::Action;
 use config::{Config, ConfigFetch, SourceLocation};
 use repo::{Packages, Repo};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::exit;
 use std::{env, fs, io};
@@ -45,8 +46,23 @@ fn setup_logger() -> Result<(), fern::InitError> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    // Relaunch with fakeroot if not running as root
+    if unsafe { libc::geteuid() } != 0 {
+        _ = std::process::Command::new("/usr/bin/fakeroot")
+            .arg(std::env::args_os().next().unwrap())
+            .exec();
+        std::process::exit(1);
+    }
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async_main())
+}
+
+async fn async_main() {
     setup_logger().unwrap();
     let version = format!("{} ({})", crate_version!(), short_sha());
 
